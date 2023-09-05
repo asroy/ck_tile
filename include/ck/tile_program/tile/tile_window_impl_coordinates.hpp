@@ -10,17 +10,17 @@
 namespace ck {
 namespace tile_program {
 
-template <typename BottomTensorView_,
-          index_t NumAccess,
-          index_t ScalarPerVector,
-          typename ThreadBufferOffsets_>
+template <typename BottomTensorView_, typename ThreadBufferOffsets_>
 struct TileWindowWithCoordinates
 {
     using ThreadBufferOffsets =
         remove_cvref_t<ThreadBufferOffsets_>; // [NumAccess x ScalarPerVector] tuple
 
-    static_assert(0 < NumAccess && NumAccess == ThreadBufferOffsets::Size());
-    static_assert(0 < ScalarPerVector && tuple_element_t<0, ThreadBufferOffsets>::Size());
+    static constexpr index_t NumAccess = ThreadBufferOffsets::Size();
+    static_assert(0 < NumAccess);
+
+    static constexpr index_t ScalarPerVector = tuple_element_t<0, ThreadBufferOffsets>::Size();
+    static_assert(0 < ScalarPerVector);
 
     using BottomTensorView = remove_reference_t<BottomTensorView_>;
 

@@ -115,10 +115,7 @@ store_tile(TileWindowWithStaticDistribution<BottomTensorView_, WindowLengths_, T
         },
         Number<NumAccess>{});
 
-    TileWindowWithCoordinates<BottomTensorView_,
-                              NumAccess,
-                              ScalarPerVector,
-                              decltype(thread_buffer_offsets)>
+    TileWindowWithCoordinates<BottomTensorView_, decltype(thread_buffer_offsets)>
         converted_tile_window(tile_window.GetBottomTensorView());
 
     // loop over thread tensor space [y0, y1, ...]

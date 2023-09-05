@@ -13,46 +13,37 @@ namespace tile_program {
 
 // FIXME: host dummy function for tile program
 template <typename BottomTensorView,
-          index_t NumAccess,
-          index_t ScalarPerVector,
           typename ThreadBufferOffsets,
           typename DataType,
           typename TileDistribution>
 __host__ decltype(auto)
-store_tile(const TileWindowWithCoordinates<BottomTensorView,
-                                           NumAccess,
-                                           ScalarPerVector,
-                                           ThreadBufferOffsets>& tile_window,
+store_tile(const TileWindowWithCoordinates<BottomTensorView, ThreadBufferOffsets>& tile_window,
            const StaticDistributedTensor<DataType, TileDistribution>&)
 {
     return tile_window;
 }
 
 template <typename BottomTensorView,
-          index_t NumAccess,
-          index_t ScalarPerVector,
           typename ThreadBufferOffsets,
           typename DataType_,
           typename TileDistribution>
 __device__ decltype(auto)
-store_tile(const TileWindowWithCoordinates<BottomTensorView,
-                                           NumAccess,
-                                           ScalarPerVector,
-                                           ThreadBufferOffsets>& tile_window,
+store_tile(const TileWindowWithCoordinates<BottomTensorView, ThreadBufferOffsets>& tile_window,
            const StaticDistributedTensor<DataType_, TileDistribution>& dstr_tensor)
 {
     using DataType = remove_cvref_t<typename BottomTensorView::DataType>;
-
     static_assert(is_same_v<remove_cvref_t<DataType_>, DataType>, "wrong!");
 
-    using vector_type_t = vector_type_maker_t<DataType, ScalarPerVector>;
-    using vector_t      = typename vector_type_t::type;
+    constexpr auto NumAccess       = std::decay_t<decltype(tile_window)>::NumAccess;
+    constexpr auto ScalarPerVector = std::decay_t<decltype(tile_window)>::ScalarPerVector;
 
     constexpr ThreadBufferOffsets thread_buffer_offsets{};
 
     // loop over thread tensor space [y0, y1, ...]
     static_for<0, NumAccess, 1>{}([&](auto iAccess) {
         // read from distributed tensor
+        using vector_type_t = vector_type_maker_t<DataType, ScalarPerVector>;
+
         vector_type_t vec;
 
         static_for<0, ScalarPerVector, 1>{}([&](auto iScalar) {
@@ -61,6 +52,8 @@ store_tile(const TileWindowWithCoordinates<BottomTensorView,
             vec.template AsType<DataType>()(iScalar) =
                 dstr_tensor.GetThreadBuffer().template At<offset>();
         });
+
+        using vector_t = typename vector_type_t::type;
 
         const vector_t vec_value = vec.template AsType<vector_t>().template At<0>();
 
