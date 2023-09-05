@@ -59,7 +59,7 @@ store_tile(const TileWindowWithCoordinates<BottomTensorView, ThreadBufferOffsets
 
         // write into bottom tensor
         tile_window.GetBottomTensorView().template SetVectorizedElements<vector_t>(
-            tile_window.coordinates_[iAccess], vec_value);
+            tile_window.GetBottomTensorThreadCoordinate(iAccess), vec_value);
     });
 
     return tile_window;

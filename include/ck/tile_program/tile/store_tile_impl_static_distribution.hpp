@@ -133,9 +133,9 @@ store_tile(TileWindowWithStaticDistribution<BottomTensorView_, WindowLengths_, T
 
         // write into bottom tensor
         tile_window.GetBottomTensorView().template SetVectorizedElements<vector_t>(
-            tile_window.GetBottomTensorThreadCoordinate(), vec_value);
-
-        converted_tile_window.coordinates_(iAccess) = tile_window.GetBottomTensorThreadCoordinate();
+            converted_tile_window.SetBottomTensorThreadCoordinate(
+                iAccess, tile_window.GetBottomTensorThreadCoordinate()),
+            vec_value);
 
         // move thread coordinate
         if constexpr(iAccess.value != NumAccess - 1)

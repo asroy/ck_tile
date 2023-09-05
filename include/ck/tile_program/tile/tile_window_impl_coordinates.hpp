@@ -47,11 +47,24 @@ struct TileWindowWithCoordinates
 
     __host__ __device__ constexpr auto GetBottomTensorView() const { return bottom_tensor_view_; }
 
+    __host__ __device__ constexpr decltype(auto)
+    GetBottomTensorThreadCoordinate(index_t iAccess) const
+    {
+        return thread_coordinates_[iAccess];
+    }
+
+    __host__ __device__ constexpr decltype(auto)
+    SetBottomTensorThreadCoordinate(index_t iAccess, const BottomTensorCoord& coordinate)
+    {
+        return thread_coordinates_(iAccess) = coordinate;
+    }
+
+    private:
     // this is the bottom tensor view
     // [x0', x1', ...] ==> [offset]
     BottomTensorView bottom_tensor_view_;
 
-    Array<BottomTensorCoord, NumAccess> coordinates_;
+    Array<BottomTensorCoord, NumAccess> thread_coordinates_;
 };
 
 } // namespace tile_program
