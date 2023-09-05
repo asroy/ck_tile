@@ -45,7 +45,10 @@ struct TileWindowWithCoordinates
 
     __host__ __device__ static constexpr index_t GetNumOfDimension() { return NDimBottomTensor; }
 
-    __host__ __device__ constexpr auto GetBottomTensorView() const { return bottom_tensor_view_; }
+    __host__ __device__ constexpr decltype(auto) GetBottomTensorView() const
+    {
+        return bottom_tensor_view_;
+    }
 
     __host__ __device__ constexpr decltype(auto)
     GetBottomTensorThreadCoordinate(index_t iAccess) const
