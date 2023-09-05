@@ -136,7 +136,7 @@ struct BlockGemmPipelineAGmemBGmemCRegV2
         auto a_block_tile = load_tile(a_copy_dram_window);
         auto b_block_tile = load_tile(b_copy_dram_window);
 
-        {
+        auto [a_copy_lds_window_with_coords, b_copy_lds_window_with_coords] = [&]() {
             // move to 1
             move_tile_window(a_copy_dram_window, {0, kKPerBlock});
             move_tile_window(b_copy_dram_window, {0, kKPerBlock});
@@ -145,17 +145,19 @@ struct BlockGemmPipelineAGmemBGmemCRegV2
             tile_elementwise_inout([](auto& c) { c = 0; }, c_block_tile);
 
             // LDS write 0
-            const auto a_block_tile_tmp = tile_elementwise_in(a_element_func, a_block_tile);
-            store_tile(a_copy_lds_window, a_block_tile_tmp);
+            const auto a_block_tile_tmp         = tile_elementwise_in(a_element_func, a_block_tile);
+            auto a_copy_lds_window_with_coords_ = store_tile(a_copy_lds_window, a_block_tile_tmp);
             // global read 1
             a_block_tile = load_tile(a_copy_dram_window);
 
             // LDS write 0
-            const auto b_block_tile_tmp = tile_elementwise_in(b_element_func, b_block_tile);
-            store_tile(b_copy_lds_window, b_block_tile_tmp);
+            const auto b_block_tile_tmp         = tile_elementwise_in(b_element_func, b_block_tile);
+            auto b_copy_lds_window_with_coords_ = store_tile(b_copy_lds_window, b_block_tile_tmp);
             // global read 1
             b_block_tile = load_tile(b_copy_dram_window);
-        }
+
+            return std::make_tuple(a_copy_lds_window_with_coords_, b_copy_lds_window_with_coords_);
+        }();
 
         index_t iCounter = num_loop - 2;
 
@@ -174,13 +176,13 @@ struct BlockGemmPipelineAGmemBGmemCRegV2
 
             // LDS write i + 1
             const auto a_block_tile_tmp = tile_elementwise_in(a_element_func, a_block_tile);
-            store_tile(a_copy_lds_window, a_block_tile_tmp);
+            store_tile(a_copy_lds_window_with_coords, a_block_tile_tmp);
             // global read i + 2
             a_block_tile = load_tile(a_copy_dram_window);
 
             // LDS write i + 1
             const auto b_block_tile_tmp = tile_elementwise_in(b_element_func, b_block_tile);
-            store_tile(b_copy_lds_window, b_block_tile_tmp);
+            store_tile(b_copy_lds_window_with_coords, b_block_tile_tmp);
             // global read i + 2
             b_block_tile = load_tile(b_copy_dram_window);
 
@@ -199,10 +201,10 @@ struct BlockGemmPipelineAGmemBGmemCRegV2
 
             // LDS write num_loop - 1
             const auto a_block_tile_tmp = tile_elementwise_in(a_element_func, a_block_tile);
-            store_tile(a_copy_lds_window, a_block_tile_tmp);
+            store_tile(a_copy_lds_window_with_coords, a_block_tile_tmp);
 
             const auto b_block_tile_tmp = tile_elementwise_in(b_element_func, b_block_tile);
-            store_tile(b_copy_lds_window, b_block_tile_tmp);
+            store_tile(b_copy_lds_window_with_coords, b_block_tile_tmp);
 
             ProgramServer::block_sync_lds();
 

@@ -10,6 +10,7 @@
 #include "ck/tensor_description/tensor_space_filling_curve.hpp"
 
 #include "ck/tile_program/tile/tile_distribution.hpp"
+#include "ck/tile_program/tile/tile_window_impl_coordinates.hpp"
 
 namespace ck {
 namespace tile_program {
@@ -19,17 +20,19 @@ template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
           typename DataType_>
-__host__ void
-store_tile(TileWindowWithStaticDistribution<BottomTensorView_, WindowLengths_, TileDistribution_>&,
+__host__ decltype(auto)
+store_tile(TileWindowWithStaticDistribution<BottomTensorView_, WindowLengths_, TileDistribution_>&
+               tile_window,
            const StaticDistributedTensor<DataType_, TileDistribution_>&)
 {
+    return tile_window;
 }
 
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
           typename DataType_>
-__device__ void
+__device__ auto
 store_tile(TileWindowWithStaticDistribution<BottomTensorView_, WindowLengths_, TileDistribution_>&
                tile_window,
            const StaticDistributedTensor<DataType_, TileDistribution_>& dstr_tensor)
@@ -88,28 +91,45 @@ store_tile(TileWindowWithStaticDistribution<BottomTensorView_, WindowLengths_, T
                                      DimAccessOrder,
                                      decltype(scalars_per_access)>;
 
-    constexpr index_t num_access = SFC_Ys::GetNumOfAccess();
+    constexpr index_t NumAccess = SFC_Ys::GetNumOfAccess();
 
-    static_assert(num_access > 0, "wrong! num_access should be larger than 0");
+    static_assert(NumAccess > 0, "wrong! NumAccess should be larger than 0");
+
+    constexpr auto thread_buffer_offsets = generate_tuple(
+        [&](auto iAccess) {
+            constexpr auto idx_ys_start = SFC_Ys::GetIndex(iAccess);
+
+            return generate_tuple(
+                [&](auto iScalar) {
+                    constexpr auto idx_ys = generate_array(
+                        [&](auto j) {
+                            return j == VectorDimY ? (idx_ys_start[j] + iScalar) : idx_ys_start[j];
+                        },
+                        Number<NDimY>{});
+
+                    constexpr index_t offset =
+                        tile_dstr.GetYs2DDescriptor().CalculateOffset(idx_ys);
+                    return Number<offset>{};
+                },
+                Number<ScalarPerVector>{});
+        },
+        Number<NumAccess>{});
+
+    TileWindowWithCoordinates<BottomTensorView_,
+                              NumAccess,
+                              ScalarPerVector,
+                              decltype(thread_buffer_offsets)>
+        converted_tile_window(tile_window.GetBottomTensorView());
 
     // loop over thread tensor space [y0, y1, ...]
-    static_for<0, num_access, 1>{}([&](auto iAccess) {
-        // data index [y0, y1, ...]
-        constexpr auto idx_ys_start = SFC_Ys::GetIndex(iAccess);
-
-        // read from distributed tensor
+    static_for<0, NumAccess, 1>{}([&](auto iAccess) {
         vector_type_t vec;
 
-        static_for<0, ScalarPerVector, 1>{}([&](auto j) {
-            constexpr auto idx_ys = generate_array(
-                [&](auto jj) {
-                    return jj == VectorDimY ? (idx_ys_start[jj] + j) : idx_ys_start[jj];
-                },
-                Number<NDimY>{});
+        static_for<0, ScalarPerVector, 1>{}([&](auto iScalar) {
+            constexpr index_t offset = thread_buffer_offsets[iAccess][iScalar];
 
-            constexpr index_t d = tile_dstr.GetYs2DDescriptor().CalculateOffset(idx_ys);
-
-            vec.template AsType<DataType>()(j) = dstr_tensor.GetThreadBuffer().template At<d>();
+            vec.template AsType<DataType>()(iScalar) =
+                dstr_tensor.GetThreadBuffer().template At<offset>();
         });
 
         const vector_t vec_value = vec.template AsType<vector_t>().template At<0>();
@@ -118,8 +138,10 @@ store_tile(TileWindowWithStaticDistribution<BottomTensorView_, WindowLengths_, T
         tile_window.GetBottomTensorView().template SetVectorizedElements<vector_t>(
             tile_window.GetBottomTensorThreadCoordinate(), vec_value);
 
+        converted_tile_window.coordinates_(iAccess) = tile_window.GetBottomTensorThreadCoordinate();
+
         // move thread coordinate
-        if constexpr(iAccess.value != num_access - 1)
+        if constexpr(iAccess.value != NumAccess - 1)
         {
             constexpr auto idx_diff_ys = SFC_Ys::GetForwardStep(iAccess);
 
@@ -131,12 +153,14 @@ store_tile(TileWindowWithStaticDistribution<BottomTensorView_, WindowLengths_, T
 
     // move thread coordinate back to origin
     {
-        constexpr auto idx_diff_ys = SFC_Ys::GetStepBetween(Number<num_access - 1>{}, Number<0>{});
+        constexpr auto idx_diff_ys = SFC_Ys::GetStepBetween(Number<NumAccess - 1>{}, Number<0>{});
 
         constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
         tile_window.MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
     }
+
+    return converted_tile_window;
 }
 
 } // namespace tile_program

@@ -20,16 +20,18 @@ template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
           typename DataType_>
-__host__ void store_tile(TileWindowWithStaticLengths<BottomTensorView_, WindowLengths_>&,
-                         const StaticDistributedTensor<DataType_, TileDistribution_>&)
+__host__ decltype(auto)
+store_tile(TileWindowWithStaticLengths<BottomTensorView_, WindowLengths_>& tile_window,
+           const StaticDistributedTensor<DataType_, TileDistribution_>&)
 {
+    return tile_window;
 }
 
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
           typename DataType_>
-__device__ void
+__device__ auto
 store_tile(TileWindowWithStaticLengths<BottomTensorView_, WindowLengths_>& tile_window_tmp,
            const StaticDistributedTensor<DataType_, TileDistribution_>& dstr_tensor)
 {
@@ -140,6 +142,8 @@ store_tile(TileWindowWithStaticLengths<BottomTensorView_, WindowLengths_>& tile_
 
         tile_window.MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
     }
+
+    return tile_window;
 }
 
 } // namespace tile_program
