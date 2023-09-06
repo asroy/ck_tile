@@ -35,4 +35,10 @@ __host__ __device__ constexpr auto to_sequence(Tuple<Number<Is>...>)
     return Sequence<Is...>{};
 }
 
+template <typename F, typename... InnerType>
+__host__ __device__ constexpr auto to_sequence(F f, Tuple<InnerType...>)
+{
+    return Sequence<f(InnerType{})...>{};
+}
+
 } // namespace ck
