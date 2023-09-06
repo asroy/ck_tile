@@ -219,7 +219,6 @@ struct GemmGemm
         using namespace ck;
         using namespace ck::tile_program;
         using namespace ck::tile_program::block;
-        using ck::si;
 
         // FIXME: assume layout A0[M0, K0], B0[N0, K0], B1[N1, N0], C1[M0, N1]
         const auto a0_dram_grid = make_naive_tensor_view<AddressSpaceEnum::Global>(
@@ -285,47 +284,6 @@ struct GemmGemm
         // init Acc1
         tile_elementwise_inout([](auto& acc1) { acc1 = 0; }, acc1_block_tile);
 
-#if 0
-        index_t iN0 = 0;
-
-        do
-        {
-            // Block GEMM0 pipeline: acc0 = a0 * b0
-            const auto acc0_block_tile = block_gemm0_pipeline(
-                a0_dram_block_window, b0_dram_block_window, K0 / kK0PerBlock, p_smem_char);
-
-            // type cast acc0 into c0
-            const auto c0_block_tile =
-                tile_elementwise_in(type_convert<C0DataType, Acc0DataType>, acc0_block_tile);
-
-            // Block GEMM1: acc1 += c0 * b1
-            {
-                // load b1
-                const auto b1_block_tile = load_tile(b1_dram_block_window);
-
-                // wait for block gemm0 pipeline to finish
-                ps.block_sync_lds();
-
-                store_tile(b1_lds_block_window, b1_block_tile);
-
-                // wait for store_tile to finish
-                ps.block_sync_lds();
-
-                // acc1 += c0 * b1
-                block_gemm1(acc1_block_tile, c0_block_tile, b1_lds_block_window);
-
-                // wait for block gemm1 to finish
-                ps.block_sync_lds();
-            }
-
-            // move tile windows
-            move_tile_window(b0_dram_block_window, {kN0PerBlock, 0});
-            move_tile_window(b1_dram_block_window, {0, kN0PerBlock});
-
-            iN0 += kN0PerBlock;
-
-        } while(iN0 < N0);
-#else
         index_t iN0 = 0;
 
         do
@@ -360,8 +318,6 @@ struct GemmGemm
                     ps.block_sync_lds();
                     move_tile_window(b1_dram_block_window, {0, kK1PerBlock});
                     store_tile(b1_lds_block_window, b1_block_tile_1);
-                    // wait for block gemm1 to finish
-                    // ps.block_sync_lds();
                 });
             }
             // tail
@@ -371,37 +327,13 @@ struct GemmGemm
                     acc1_block_tile,
                     c0_block_tile(si{}, si{Number<k1_loops - 1>{} * K1PerBlock, K1PerBlock}),
                     b1_lds_block_window);
-                // ps.block_sync_lds();
-            }
-#if 0
-            // Block GEMM1: acc1 += c0 * b1
-            {
-                // wait for block gemm0 pipeline to finish
-                ps.block_sync_lds();
-
-                store_tile(b1_lds_block_window, b1_block_tile);
-
-                // wait for store_tile to finish
-                ps.block_sync_lds();
-
-                // acc1 += c0 * b1
-                block_gemm1(acc1_block_tile, c0_block_tile, b1_lds_block_window);
-
-                // wait for block gemm1 to finish
-                ps.block_sync_lds();
             }
 
-            // move tile windows
             move_tile_window(b0_dram_block_window, {kN0PerBlock, 0});
-            move_tile_window(b1_dram_block_window, {0, kN0PerBlock});
-#endif
-            move_tile_window(b0_dram_block_window, {kN0PerBlock, 0});
-            // move_tile_window(b1_dram_block_window, {0, kK1PerBlock});
             ps.block_sync_lds();
             iN0 += kN0PerBlock;
 
         } while(iN0 < N0);
-#endif
 
         // type cast acc1 into c1
         const auto c1_block_tile =
