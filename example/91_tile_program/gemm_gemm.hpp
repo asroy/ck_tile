@@ -86,17 +86,18 @@ struct GemmGemm
         constexpr index_t kNPerBlock = kN1PerBlock;
         constexpr index_t kKPerBlock = kK1PerBlock;
         constexpr index_t kPad       = 1;
+        constexpr index_t k1         = 8;
 
         constexpr auto b_lds_block_desc_0 = make_naive_tensor_descriptor(
-            make_tuple(Number<kKPerBlock / 8>{}, Number<kNPerBlock>{}, Number<8>{}),
-            make_tuple(Number<(kNPerBlock + kPad) * 8>{}, Number<8>{}, Number<1>{}),
-            Number<8>{},
+            make_tuple(Number<kKPerBlock / k1>{}, Number<kNPerBlock>{}, Number<k1>{}),
+            make_tuple(Number<(kNPerBlock + kPad) * k1>{}, Number<k1>{}, Number<1>{}),
+            Number<k1>{},
             Number<1>{});
 
         constexpr auto b_lds_block_desc = transform_tensor_descriptor(
             b_lds_block_desc_0,
             make_tuple(make_pass_through_transform(kNPerBlock),
-                       make_merge_transform(make_tuple(kKPerBlock / 8, 8))),
+                       make_merge_transform(make_tuple(kKPerBlock / k1, k1))),
             make_tuple(Sequence<1>{}, Sequence<0, 2>{}),
             make_tuple(Sequence<0>{}, Sequence<1>{}));
 
@@ -246,29 +247,28 @@ struct GemmGemm
         __shared__ char p_smem_char[GetStaticLdsSize()];
 
         // A0 DRAM block window
-        auto a0_dram_block_window = make_tile_window(
-            a0_dram_grid, make_tuple(Number<kM0PerBlock>{}, Number<kK0PerBlock>{}), {iM0, 0});
+        auto a0_dram_block_window =
+            make_tile_window(a0_dram_grid, make_tuple(M0PerBlock, K0PerBlock), {iM0, 0});
 
         // B0 DRAM block window
-        auto b0_dram_block_window = make_tile_window(
-            b0_dram_grid, make_tuple(Number<kN0PerBlock>{}, Number<kK0PerBlock>{}), {0, 0});
+        auto b0_dram_block_window =
+            make_tile_window(b0_dram_grid, make_tuple(N0PerBlock, K0PerBlock), {0, 0});
 
         // Block GEMM0 pipeline
         constexpr auto block_gemm0_pipeline = BlockGemm0Pipeline{};
 
         // B1 DRAM window
-        auto b1_dram_block_window =
-            make_tile_window(b1_dram_grid,
-                             make_tuple(Number<kN1PerBlock>{}, Number<kK1PerBlock>{}),
-                             {iN1, 0},
-                             MakeB1DramTileDistribution());
+        auto b1_dram_block_window = make_tile_window(b1_dram_grid,
+                                                     make_tuple(N1PerBlock, K1PerBlock),
+                                                     {iN1, 0},
+                                                     MakeB1DramTileDistribution());
 
         // B1 LDS tensor view: occupies the same LDS allocation as block_gemm0_pipeline
         auto b1_lds_block = make_tensor_view<AddressSpaceEnum::Lds>(
             reinterpret_cast<B1DataType*>(p_smem_char), MakeB1LdsBlockDescriptor());
 
-        auto b1_lds_block_window = make_tile_window(
-            b1_lds_block, make_tuple(Number<kN1PerBlock>{}, Number<kN0PerBlock>{}), {0, 0});
+        auto b1_lds_block_window =
+            make_tile_window(b1_lds_block, make_tuple(N1PerBlock, K1PerBlock), {0, 0});
 
         // Bock GEMM1
         constexpr auto block_gemm1 = BlockGemm1{};
@@ -343,11 +343,10 @@ struct GemmGemm
         auto c1_dram_grid = make_naive_tensor_view<AddressSpaceEnum::Global>(
             p_c1, make_tuple(M0, N1), make_tuple(Ldc1, 1), Number<32>{}, Number<1>{});
 
-        auto c1_dram_window =
-            make_tile_window(c1_dram_grid,
-                             make_tuple(Number<kM0PerBlock>{}, Number<kN1PerBlock>{}),
-                             {iM0, iN1},
-                             c1_block_tile.GetTileDistribution());
+        auto c1_dram_window = make_tile_window(c1_dram_grid,
+                                               make_tuple(M0PerBlock, N1PerBlock),
+                                               {iM0, iN1},
+                                               c1_block_tile.GetTileDistribution());
 
         store_tile(c1_dram_window, c1_block_tile);
     }
