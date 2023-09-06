@@ -71,7 +71,7 @@ struct GemmGemm
         constexpr index_t kKPerBlock = kK1PerBlock;
 
         constexpr auto b_lds_block_desc =
-            make_naive_tensor_descriptor_packed(make_tuple(kNPerBlock, kKPerBlock), ck::Number<32>{});
+            make_naive_tensor_descriptor_packed(make_tuple(kNPerBlock, kKPerBlock), Number<32>{});
 
         return b_lds_block_desc;
     }
@@ -88,10 +88,10 @@ struct GemmGemm
         constexpr index_t kPad       = 1;
 
         constexpr auto b_lds_block_desc_0 = make_naive_tensor_descriptor(
-            make_tuple(ck::Number<kKPerBlock / 8>{}, ck::Number<kNPerBlock>{}, ck::Number<8>{}),
-            make_tuple(ck::Number<(kNPerBlock + kPad) * 8>{}, ck::Number<8>{}, ck::Number<1>{}),
-            ck::Number<8>{},
-            ck::Number<1>{});
+            make_tuple(Number<kKPerBlock / 8>{}, Number<kNPerBlock>{}, Number<8>{}),
+            make_tuple(Number<(kNPerBlock + kPad) * 8>{}, Number<8>{}, Number<1>{}),
+            Number<8>{},
+            Number<1>{});
 
         constexpr auto b_lds_block_desc = transform_tensor_descriptor(
             b_lds_block_desc_0,
@@ -114,7 +114,7 @@ struct GemmGemm
         constexpr index_t kKPerBlock = kK1PerBlock;
 
         constexpr auto b_lds_block_desc_d1_d2_d3 = make_naive_tensor_descriptor_packed(
-            make_tuple(kNPerBlock / 2, 2, kKPerBlock), ck::Number<kKPerBlock>{});
+            make_tuple(kNPerBlock / 2, 2, kKPerBlock), Number<kKPerBlock>{});
 
         constexpr index_t kK1 = 16 / sizeof(BDataType);
 
@@ -146,7 +146,7 @@ struct GemmGemm
         constexpr index_t kKPerBlock = kK1PerBlock;
 
         constexpr auto b_lds_block_desc_d1_d2_d3 = make_naive_tensor_descriptor_packed(
-            make_tuple(kNPerBlock / 2, 2, kKPerBlock), ck::Number<kKPerBlock>{});
+            make_tuple(kNPerBlock / 2, 2, kKPerBlock), Number<kKPerBlock>{});
 
         constexpr index_t kK1 = 16 / sizeof(BDataType);
 
@@ -223,13 +223,13 @@ struct GemmGemm
 
         // FIXME: assume layout A0[M0, K0], B0[N0, K0], B1[N1, N0], C1[M0, N1]
         const auto a0_dram_grid = make_naive_tensor_view<AddressSpaceEnum::Global>(
-            p_a0, make_tuple(M0, K0), make_tuple(Lda0, 1), ck::Number<32>{}, ck::Number<1>{});
+            p_a0, make_tuple(M0, K0), make_tuple(Lda0, 1), Number<32>{}, Number<1>{});
 
         const auto b0_dram_grid = make_naive_tensor_view<AddressSpaceEnum::Global>(
-            p_b0, make_tuple(N0, K0), make_tuple(Ldb0, 1), ck::Number<32>{}, ck::Number<1>{});
+            p_b0, make_tuple(N0, K0), make_tuple(Ldb0, 1), Number<32>{}, Number<1>{});
 
         const auto b1_dram_grid = make_naive_tensor_view<AddressSpaceEnum::Global>(
-            p_b1, make_tuple(N1, N0), make_tuple(Ldb1, 1), ck::Number<32>{}, ck::Number<1>{});
+            p_b1, make_tuple(N1, N0), make_tuple(Ldb1, 1), Number<32>{}, Number<1>{});
 
         // divide problem
         const auto id_block = ps.get_block_id();
@@ -247,14 +247,12 @@ struct GemmGemm
         __shared__ char p_smem_char[GetStaticLdsSize()];
 
         // A0 DRAM block window
-        auto a0_dram_block_window =
-            make_tile_window(a0_dram_grid,
-                             make_tuple(ck::Number<kM0PerBlock>{}, ck::Number<kK0PerBlock>{}),
-                             {iM0, 0});
+        auto a0_dram_block_window = make_tile_window(
+            a0_dram_grid, make_tuple(Number<kM0PerBlock>{}, Number<kK0PerBlock>{}), {iM0, 0});
 
         // B0 DRAM block window
         auto b0_dram_block_window = make_tile_window(
-            b0_dram_grid, make_tuple(ck::Number<kN0PerBlock>{}, ck::Number<kK0PerBlock>{}), {0, 0});
+            b0_dram_grid, make_tuple(Number<kN0PerBlock>{}, Number<kK0PerBlock>{}), {0, 0});
 
         // Block GEMM0 pipeline
         constexpr auto block_gemm0_pipeline = BlockGemm0Pipeline{};
@@ -262,7 +260,7 @@ struct GemmGemm
         // B1 DRAM window
         auto b1_dram_block_window =
             make_tile_window(b1_dram_grid,
-                             make_tuple(ck::Number<kN1PerBlock>{}, ck::Number<kK1PerBlock>{}),
+                             make_tuple(Number<kN1PerBlock>{}, Number<kK1PerBlock>{}),
                              {iN1, 0},
                              MakeB1DramTileDistribution());
 
@@ -271,7 +269,7 @@ struct GemmGemm
             reinterpret_cast<B1DataType*>(p_smem_char), MakeB1LdsBlockDescriptor());
 
         auto b1_lds_block_window = make_tile_window(
-            b1_lds_block, make_tuple(ck::Number<kN1PerBlock>{}, ck::Number<kN0PerBlock>{}), {0, 0});
+            b1_lds_block, make_tuple(Number<kN1PerBlock>{}, Number<kN0PerBlock>{}), {0, 0});
 
         // Bock GEMM1
         constexpr auto block_gemm1 = BlockGemm1{};
@@ -371,7 +369,7 @@ struct GemmGemm
                 ps.block_sync_lds();
                 block_gemm1(
                     acc1_block_tile,
-                    c0_block_tile(si{}, si{ck::Number<k1_loops - 1>{} * K1PerBlock, K1PerBlock}),
+                    c0_block_tile(si{}, si{Number<k1_loops - 1>{} * K1PerBlock, K1PerBlock}),
                     b1_lds_block_window);
                 // ps.block_sync_lds();
             }
@@ -411,11 +409,11 @@ struct GemmGemm
 
         // store c1
         auto c1_dram_grid = make_naive_tensor_view<AddressSpaceEnum::Global>(
-            p_c1, make_tuple(M0, N1), make_tuple(Ldc1, 1), ck::Number<32>{}, ck::Number<1>{});
+            p_c1, make_tuple(M0, N1), make_tuple(Ldc1, 1), Number<32>{}, Number<1>{});
 
         auto c1_dram_window =
             make_tile_window(c1_dram_grid,
-                             make_tuple(ck::Number<kM0PerBlock>{}, ck::Number<kN1PerBlock>{}),
+                             make_tuple(Number<kM0PerBlock>{}, Number<kN1PerBlock>{}),
                              {iM0, iN1},
                              c1_block_tile.GetTileDistribution());
 
