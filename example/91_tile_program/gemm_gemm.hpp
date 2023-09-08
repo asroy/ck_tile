@@ -12,6 +12,7 @@
 #include "ck/tile_program/tile/tile_distribution.hpp"
 #include "ck/tile_program/tile/tile_elementwise.hpp"
 #include "ck/tile_program/tile/tile_gemm_shape.hpp"
+#include "ck/tile_program/tile/slice_tile.hpp"
 #include "ck/tile_program/warp_tile/warp_gemm.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_gemm_pipeline_agmem_bgmem_creg_v2.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_gemm_pipeline_problem.hpp"
@@ -97,7 +98,8 @@ struct GemmGemm
         constexpr auto b_lds_block_desc = transform_tensor_descriptor(
             b_lds_block_desc_0,
             make_tuple(make_pass_through_transform(kNPerBlock),
-                       make_merge_transform(make_tuple(kKPerBlock / k1, k1))),
+                       // make_merge_transform_v3_division_mod(make_tuple(kKPerBlock / k1, k1))),
+                       make_merge_transform(make_tuple(Number<kKPerBlock / k1>{}, Number<k1>{}))),
             make_tuple(Sequence<1>{}, Sequence<0, 2>{}),
             make_tuple(Sequence<0>{}, Sequence<1>{}));
 
@@ -275,10 +277,12 @@ struct GemmGemm
 
         // Acc1 tile
         auto acc1_block_tile = decltype(block_gemm1(
-            tile_elementwise_in(
-                type_convert<C0DataType, Acc0DataType>,
-                block_gemm0_pipeline(a0_dram_block_window, b0_dram_block_window, 0, nullptr))(
-                si{}, si{I0, K1PerBlock}),
+            get_slice_tile(
+                tile_elementwise_in(
+                    type_convert<C0DataType, Acc0DataType>,
+                    block_gemm0_pipeline(a0_dram_block_window, b0_dram_block_window, 0, nullptr)),
+                si{},
+                si{I0, K1PerBlock}),
             b1_dram_block_window)){};
 
         // init Acc1
@@ -313,7 +317,7 @@ struct GemmGemm
                     const auto b1_block_tile_1 = load_tile(b1_dram_block_window);
                     ps.block_sync_lds();
                     block_gemm1(acc1_block_tile,
-                                c0_block_tile(si{}, si{i * K1PerBlock, K1PerBlock}),
+                                get_slice_tile(c0_block_tile, si{}, si{i * K1PerBlock, K1PerBlock}),
                                 b1_lds_block_window);
                     ps.block_sync_lds();
                     move_tile_window(b1_dram_block_window, {0, kK1PerBlock});
@@ -323,10 +327,11 @@ struct GemmGemm
             // tail
             {
                 ps.block_sync_lds();
-                block_gemm1(
-                    acc1_block_tile,
-                    c0_block_tile(si{}, si{Number<k1_loops - 1>{} * K1PerBlock, K1PerBlock}),
-                    b1_lds_block_window);
+                block_gemm1(acc1_block_tile,
+                            get_slice_tile(c0_block_tile,
+                                           si{},
+                                           si{Number<k1_loops - 1>{} * K1PerBlock, K1PerBlock}),
+                            b1_lds_block_window);
             }
 
             move_tile_window(b0_dram_block_window, {kN0PerBlock, 0});
