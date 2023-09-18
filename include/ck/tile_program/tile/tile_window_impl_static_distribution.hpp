@@ -8,11 +8,62 @@
 #include "ck/tensor_description/tensor_adaptor_coordinate.hpp"
 
 #include "ck/tile_program/tile/tile_distribution.hpp"
+#include "ck/tile_program/tile/tile_window_compute_mode.hpp"
 
 namespace ck {
 namespace tile_program {
+namespace detail {
+template <typename Value, index_t Capacity>
+struct static_vector
+{
+    using value_type      = Value;
+    using reference       = value_type&;
+    using const_reference = const value_type&;
+    using size_type       = index_t;
 
-template <typename BottomTensorView_, typename WindowLengths_, typename StaticTileDistribution_>
+    static_vector() = default;
+
+    static_vector(const static_vector&) = default;
+
+    constexpr reference front() { return values_[0]; }
+
+    constexpr const_reference front() const { return values_[0]; }
+
+    constexpr reference back() { return values_[size_ - 1]; }
+
+    constexpr const_reference back() const { return values_[size_ - 1]; }
+
+    constexpr void push_back(const Value& value) { return values_[size_++] = value; }
+
+    constexpr reference operator[](size_type idx) { return values_[idx]; }
+
+    constexpr const_reference operator[](size_type idx) const { return values_[idx]; }
+
+    constexpr size_type size() const { return size_; }
+
+    static constexpr size_type capacity() { return Capacity; }
+
+    private:
+    Array<Value, Capacity> values_ = {};
+    index_t size_                  = 0;
+};
+
+template <typename Coordinate, index_t NumAccess>
+struct PreComputedCoords : static_vector<Coordinate, NumAccess>
+{
+};
+
+template <typename Coordinate>
+struct PreComputedCoords<Coordinate, 0>
+{
+};
+
+} // namespace detail
+
+template <typename BottomTensorView_,
+          typename WindowLengths_,
+          typename StaticTileDistribution_,
+          typename ComputeMode>
 struct TileWindowWithStaticDistribution
 {
     using BottomTensorView = remove_reference_t<BottomTensorView_>;
@@ -239,13 +290,12 @@ struct TileWindowWithStaticDistribution
 
         using SpaceFillingCurve = typename TraitsBase::
             template SpaceFillingCurve<Sequence<YSliceLengths...>, VectorDimY, ScalarPerVector>;
+
+        static constexpr index_t NumAccess = SpaceFillingCurve::GetNumOfAccess();
     };
 
-    template <typename OtherDataType>
     struct StoreTraits : TraitsBase
     {
-        static_assert(is_same_v<OtherDataType, DataType>, "wrong!");
-
         using TraitsBase::NDimP;
         using TraitsBase::NDimY;
 
@@ -295,7 +345,14 @@ struct TileWindowWithStaticDistribution
 
         public:
         using SpaceFillingCurve = decltype(GetSpaceFillingCurve());
+
+        static constexpr index_t NumAccess = SpaceFillingCurve::GetNumOfAccess();
     };
+
+    static constexpr index_t NumAccessForLoad =
+        StoreTraits::NumAccess; /// TODO: enlarge this number if unnecessary
+    static constexpr index_t NumAccessForStore = StoreTraits::NumAccess;
+    static constexpr index_t MaxNumAccess      = math::max(NumAccessForLoad, NumAccessForStore);
 
     template <typename YIndex, index_t... YSliceLengths>
     __device__ auto LoadSlicedThreadData(const YIndex& ys_slice_origin, Sequence<YSliceLengths...>)
@@ -383,7 +440,9 @@ struct TileWindowWithStaticDistribution
     template <typename DataType_>
     __device__ void Store(const StaticDistributedTensor<DataType_, TileDstr>& dstr_tensor)
     {
-        using Traits = StoreTraits<DataType_>;
+        static_assert(is_same_v<DataType_, DataType>, "wrong!");
+
+        using Traits = StoreTraits;
 
         constexpr index_t NDimP = Traits::NDimP;
         constexpr index_t NDimY = Traits::NDimY;
@@ -472,28 +531,42 @@ struct TileWindowWithStaticDistribution
 
     //    thread window coordinate
     WindowAdaptorCoord window_adaptor_thread_coord_;
+
+    detail::PreComputedCoords<BottomTensorCoord, MaxNumAccess> pre_computed_coords_;
 };
 
 // TODO: use strategy
-template <typename TensorView_, typename WindowLengths_, typename StaticTileDistribution_>
+template <typename TensorView_,
+          typename WindowLengths_,
+          typename StaticTileDistribution_,
+          typename ComputeMode = TileWindowComputeMode::Normal>
 __device__ constexpr auto
 make_tile_window(const TensorView_& tensor_view,
                  const WindowLengths_& window_lengths,
                  const MultiIndex<TensorView_::GetNumOfDimension()>& origin,
-                 const StaticTileDistribution_& tile_distribution)
+                 const StaticTileDistribution_& tile_distribution,
+                 ComputeMode = {})
 {
     return TileWindowWithStaticDistribution<remove_cvref_t<TensorView_>,
                                             remove_cvref_t<WindowLengths_>,
-                                            remove_cvref_t<StaticTileDistribution_>>{
+                                            remove_cvref_t<StaticTileDistribution_>,
+                                            ComputeMode>{
         tensor_view, window_lengths, origin, tile_distribution};
 }
 
-template <typename TensorView_, typename WindowLengths_, typename StaticTileDistribution_>
+template <typename TensorView_,
+          typename WindowLengths_,
+          typename StaticTileDistribution_,
+          typename ComputeMode>
 __device__ void move_tile_window(
-    TileWindowWithStaticDistribution<TensorView_, WindowLengths_, StaticTileDistribution_>& window,
-    const MultiIndex<
-        TileWindowWithStaticDistribution<TensorView_, WindowLengths_, StaticTileDistribution_>::
-            GetNumOfDimension()>& step)
+    TileWindowWithStaticDistribution<TensorView_,
+                                     WindowLengths_,
+                                     StaticTileDistribution_,
+                                     ComputeMode>& window,
+    const MultiIndex<TileWindowWithStaticDistribution<TensorView_,
+                                                      WindowLengths_,
+                                                      StaticTileDistribution_,
+                                                      ComputeMode>::GetNumOfDimension()>& step)
 {
     window.window_origin_ += step;
 
