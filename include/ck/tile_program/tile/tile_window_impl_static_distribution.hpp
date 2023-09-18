@@ -27,7 +27,7 @@ struct static_vector
 
     __host__ __device__ void push_back(const Value& value) { values_(size_++) = value; }
 
-    __host__ __device__ reference operator[](size_type idx) { return values_[idx]; }
+    __host__ __device__ reference operator[](size_type idx) { return values_(idx); }
 
     __host__ __device__ const_reference operator[](size_type idx) const { return values_[idx]; }
 
@@ -512,12 +512,25 @@ struct TileWindowWithStaticDistribution
 
             const vector_t vec_value = vec.template AsType<vector_t>().template At<0>();
 
+            const auto thread_coord = [iAccess, this] {
+                if constexpr(is_same_v<ComputeMode,
+                                       TileWindowComputeMode::PreComputeCoordsForStore>)
+                {
+                    return pre_computed_coords_[iAccess];
+                }
+                else
+                {
+                    return (*this).GetBottomTensorThreadCoordinate();
+                }
+            }();
+
             // write into bottom tensor
-            (*this).GetBottomTensorView().template SetVectorizedElements<vector_t>(
-                (*this).GetBottomTensorThreadCoordinate(), vec_value);
+            (*this).GetBottomTensorView().template SetVectorizedElements<vector_t>(thread_coord,
+                                                                                   vec_value);
 
             // move thread coordinate
-            if constexpr(iAccess.value != num_access - 1)
+            if constexpr(!is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore> &&
+                         iAccess.value != num_access - 1)
             {
                 constexpr auto idx_diff_ys = SFC_Ys::GetForwardStep(iAccess);
 
@@ -529,6 +542,7 @@ struct TileWindowWithStaticDistribution
         });
 
         // move thread coordinate back to origin
+        if constexpr(!is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore>)
         {
             constexpr auto idx_diff_ys =
                 SFC_Ys::GetStepBetween(Number<num_access - 1>{}, Number<0>{});
