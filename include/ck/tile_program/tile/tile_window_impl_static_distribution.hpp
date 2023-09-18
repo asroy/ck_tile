@@ -477,7 +477,8 @@ struct TileWindowWithStaticDistribution
     template <typename DataType_>
     __device__ void Store(const StaticDistributedTensor<DataType_, TileDstr>& dstr_tensor)
     {
-        static_assert(is_same_v<DataType_, DataType>, "Unmatched DataType of tile window & distributed tensor");
+        static_assert(is_same_v<DataType_, DataType>,
+                      "Unmatched DataType of tile window & distributed tensor");
 
         using Traits = StoreTraits;
 
