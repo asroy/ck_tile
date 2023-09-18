@@ -257,7 +257,8 @@ struct TileWindowWithStaticDistribution
         bottom_tensor_thread_coord_ = make_tensor_coordinate(
             bottom_tensor_view_.GetTensorDescriptor(), bottom_tensor_thread_origin_idx);
 
-        if constexpr (is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore>) {
+        if constexpr(is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore>)
+        {
             using Traits = StoreTraits;
 
             constexpr index_t NDimP = Traits::NDimP;
@@ -288,7 +289,8 @@ struct TileWindowWithStaticDistribution
                 constexpr auto idx_diff_ys =
                     SFC_Ys::GetStepBetween(Number<num_access - 1>{}, Number<0>{});
 
-                constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
+                constexpr auto idx_diff_ps_ys =
+                    container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
                 (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
             }
@@ -412,18 +414,10 @@ struct TileWindowWithStaticDistribution
 
         // loop over thread tensor space [y0, y1, ...]
         static_for<0, num_access, 1>{}([&](auto iAccess) {
-            const auto thread_coordinate = [this, iAccess]() {
-               if constexpr(is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore>) {
-                   return pre_computed_coords_[iAccess];
-               } else {
-                   return (*this).GetBottomTensorThreadCoordinate();
-               }
-            }();
-
             // read from bottom tensor
             const vector_t vec_value =
                 (*this).GetBottomTensorView().template GetVectorizedElements<vector_t>(
-                    thread_coordinate);
+                    (*this).GetBottomTensorThreadCoordinate());
 
             const vector_type_t vec{vec_value};
 
@@ -444,7 +438,7 @@ struct TileWindowWithStaticDistribution
             });
 
             // move thread coordinate
-            if constexpr(!is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore> && iAccess.value != num_access - 1)
+            if constexpr(iAccess.value != num_access - 1)
             {
                 constexpr auto idx_diff_ys = SFC_Ys::GetForwardStep(iAccess);
 
@@ -455,21 +449,19 @@ struct TileWindowWithStaticDistribution
             }
         });
 
-        if constexpr(!is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore>) {
-            // move thread coordinate back to origin
-            {
-                constexpr auto idx_diff_ys =
-                    SFC_Ys::GetStepBetween(Number<num_access - 1>{}, Number<0>{});
+        // move thread coordinate back to origin
+        {
+            constexpr auto idx_diff_ys =
+                SFC_Ys::GetStepBetween(Number<num_access - 1>{}, Number<0>{});
 
-                constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
+            constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
-                (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
-            }
-
-            // move back to origin
-            (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(MultiIndex<NDimP + NDimY>{0} -
-                                                                     ps_ys_slice_origin);
+            (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
         }
+
+        // move back to origin
+        (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(MultiIndex<NDimP + NDimY>{0} -
+                                                                 ps_ys_slice_origin);
 
         return thread_buf;
     }
@@ -568,7 +560,8 @@ struct TileWindowWithStaticDistribution
     //    thread window coordinate
     WindowAdaptorCoord window_adaptor_thread_coord_;
 
-    static constexpr index_t MaxNumPreComputedCoords = (ComputeMode{} == TileWindowComputeMode::Normal{} ? 0: StoreTraits::NumAccess);
+    static constexpr index_t MaxNumPreComputedCoords =
+        (ComputeMode{} == TileWindowComputeMode::Normal{} ? 0 : StoreTraits::NumAccess);
 
     detail::PreComputedCoords<BottomTensorCoord, MaxNumPreComputedCoords> pre_computed_coords_;
 };
