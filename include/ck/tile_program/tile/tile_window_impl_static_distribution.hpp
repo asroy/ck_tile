@@ -161,6 +161,129 @@ struct TileWindowWithStaticDistribution
                           get_container_subset(window_adaptor_ps_ys_vector_strides, y_dims));
     }
 
+    template <typename YIndex, index_t... YSliceLengths>
+    __device__ auto load_sliced_thread_data(const YIndex& ys_slice_origin,
+                                            Sequence<YSliceLengths...> y_slice_lengths)
+    {
+        using OutDataType = remove_cvref_t<typename BottomTensorView_::DataType>;
+        using TileWindow  = TileWindowWithStaticDistribution;
+
+        constexpr auto tile_dstr = TileDstr{};
+
+        constexpr index_t NDimP = TileDstr::GetNumOfDimensionP();
+        constexpr index_t NDimY = TileDstr::GetNumOfDimensionY();
+
+        static_assert(NDimY == YIndex::Size() && NDimY == sizeof...(YSliceLengths),
+                      "wrong! inconsistent # of dimension");
+
+        static_assert(TileWindow::HasStaticTileDistribution(),
+                      "wrong! assume static tile distribution");
+
+        constexpr index_t thread_element_size =
+            container_reduce(y_slice_lengths, math::multiplies{}, 1);
+
+        StaticBuffer<AddressSpaceEnum::Vgpr, OutDataType, thread_element_size, true> thread_buf;
+
+        constexpr auto tmp = [&y_slice_lengths]() {
+            const auto [ys_vector_lengths, ys_vector_strides] =
+                TileWindow::GetWindowAdaptorYsSafeVectorLengthStrides();
+
+            index_t VectorDimY      = 0;
+            index_t ScalarPerVector = 1;
+
+            for(index_t i = 0; i < NDimY; ++i)
+            {
+                if(ys_vector_strides[i] == 1 && ys_vector_lengths[i] > ScalarPerVector)
+                {
+                    ScalarPerVector = math::gcd(ys_vector_lengths[i], y_slice_lengths[i]);
+                    VectorDimY      = i;
+                }
+            }
+
+            return make_tuple(VectorDimY, ScalarPerVector);
+        }();
+
+        constexpr index_t VectorDimY      = tmp.template At<0>();
+        constexpr index_t ScalarPerVector = tmp.template At<1>();
+
+        // FIXME
+        using DimAccessOrder = typename arithmetic_sequence_gen<0, NDimY, 1>::type;
+
+        constexpr auto scalars_per_access_arr = generate_array(
+            [&](auto i) { return (i == VectorDimY) ? ScalarPerVector : 1; }, Number<NDimY>{});
+
+        constexpr auto scalars_per_access = TO_SEQUENCE(scalars_per_access_arr, NDimY);
+
+        using vector_type_t = vector_type_maker_t<OutDataType, ScalarPerVector>;
+        using vector_t      = typename vector_type_t::type;
+
+        using SFC_Ys = SpaceFillingCurve<decltype(y_slice_lengths),
+                                         DimAccessOrder,
+                                         decltype(scalars_per_access)>;
+
+        constexpr index_t num_access = SFC_Ys::GetNumOfAccess();
+
+        static_assert(num_access > 0, "wrong! num_access should be larger than 0");
+
+        // move to slice origin
+        const auto ps_ys_slice_origin = container_concat(Array<index_t, NDimP>{0}, ys_slice_origin);
+
+        (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(ps_ys_slice_origin);
+
+        // loop over thread tensor space [y0, y1, ...]
+        static_for<0, num_access, 1>{}([&](auto iAccess) {
+            // read from bottom tensor
+            const vector_t vec_value =
+                (*this).GetBottomTensorView().template GetVectorizedElements<vector_t>(
+                    (*this).GetBottomTensorThreadCoordinate());
+
+            const vector_type_t vec{vec_value};
+
+            // data index [y0, y1, ...]
+            constexpr auto idx_ys_start = SFC_Ys::GetIndex(iAccess);
+
+            // write into distributed tensor
+            static_for<0, ScalarPerVector, 1>{}([&](auto j) {
+                constexpr auto idx_ys = generate_array(
+                    [&](auto jj) {
+                        return jj == VectorDimY ? (idx_ys_start[jj] + j) : idx_ys_start[jj];
+                    },
+                    Number<NDimY>{});
+
+                constexpr index_t d = tile_dstr.GetYs2DDescriptor().CalculateOffset(idx_ys);
+
+                thread_buf.template At<d>() = vec.template AsType<OutDataType>()[j];
+            });
+
+            // move thread coordinate
+            if constexpr(iAccess.value != num_access - 1)
+            {
+                constexpr auto idx_diff_ys = SFC_Ys::GetForwardStep(iAccess);
+
+                constexpr auto idx_diff_ps_ys =
+                    container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
+
+                (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+            }
+        });
+
+        // move thread coordinate back to origin
+        {
+            constexpr auto idx_diff_ys =
+                SFC_Ys::GetStepBetween(Number<num_access - 1>{}, Number<0>{});
+
+            constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
+
+            (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+        }
+
+        // move back to origin
+        (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(MultiIndex<NDimP + NDimY>{0} -
+                                                                 ps_ys_slice_origin);
+
+        return thread_buf;
+    }
+
     template <typename DataType_>
     __device__ void store(const StaticDistributedTensor<DataType_, TileDstr>& dstr_tensor)
     {
