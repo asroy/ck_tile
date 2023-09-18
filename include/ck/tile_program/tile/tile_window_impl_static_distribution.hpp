@@ -287,9 +287,10 @@ struct TileWindowWithStaticDistribution
     template <typename DataType_>
     __device__ void store(const StaticDistributedTensor<DataType_, TileDstr>& dstr_tensor)
     {
-        using TileWindow = TileWindowWithStaticDistribution;
+        using OutDataType = remove_cvref_t<typename BottomTensorView_::DataType>;
+        using TileWindow  = TileWindowWithStaticDistribution;
 
-        static_assert(is_same_v<remove_cvref_t<DataType_>, DataType>, "wrong!");
+        static_assert(is_same_v<remove_cvref_t<DataType_>, OutDataType>, "wrong!");
         static_assert(TileWindow::HasStaticTileDistribution(), "wrong!");
 
         constexpr auto tile_dstr = TileDstr{};
@@ -330,7 +331,7 @@ struct TileWindowWithStaticDistribution
 
         constexpr auto scalars_per_access = TO_SEQUENCE(scalars_per_access_arr, NDimY);
 
-        using vector_type_t = vector_type_maker_t<DataType, ScalarPerVector>;
+        using vector_type_t = vector_type_maker_t<OutDataType, ScalarPerVector>;
         using vector_t      = typename vector_type_t::type;
 
         using SFC_Ys = SpaceFillingCurve<decltype(thread_tensor_lengths_ys),
@@ -358,7 +359,8 @@ struct TileWindowWithStaticDistribution
 
                 constexpr index_t d = tile_dstr.GetYs2DDescriptor().CalculateOffset(idx_ys);
 
-                vec.template AsType<DataType>()(j) = dstr_tensor.GetThreadBuffer().template At<d>();
+                vec.template AsType<OutDataType>()(j) =
+                    dstr_tensor.GetThreadBuffer().template At<d>();
             });
 
             const vector_t vec_value = vec.template AsType<vector_t>().template At<0>();
