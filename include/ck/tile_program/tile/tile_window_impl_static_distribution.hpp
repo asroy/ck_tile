@@ -161,65 +161,160 @@ struct TileWindowWithStaticDistribution
                           get_container_subset(window_adaptor_ps_ys_vector_strides, y_dims));
     }
 
-    template <typename YIndex, index_t... YSliceLengths>
-    __device__ auto load_sliced_thread_data(const YIndex& ys_slice_origin,
-                                            Sequence<YSliceLengths...> y_slice_lengths)
+    struct TraitsBase
     {
-        using OutDataType = remove_cvref_t<typename BottomTensorView_::DataType>;
-        using TileWindow  = TileWindowWithStaticDistribution;
+        protected:
+        static constexpr index_t NDimP = TileDstr::GetNumOfDimensionP();
+        static constexpr index_t NDimY = TileDstr::GetNumOfDimensionY();
 
-        constexpr auto tile_dstr = TileDstr{};
+        using DataType = remove_cvref_t<typename BottomTensorView_::DataType>;
 
-        constexpr index_t NDimP = TileDstr::GetNumOfDimensionP();
-        constexpr index_t NDimY = TileDstr::GetNumOfDimensionY();
+        template <index_t ScalarPerVector>
+        using vector_type_t = vector_type_maker_t<DataType, ScalarPerVector>;
+
+        template <index_t VectorDimY, index_t ScalarPerVector>
+        static constexpr auto GetScalarsPerAccess()
+        {
+            constexpr auto scalars_per_access_arr = generate_array(
+                [&](auto i) { return (i == VectorDimY) ? ScalarPerVector : 1; }, Number<NDimY>{});
+
+            /// FIXME: add non-automatic storage argument support to macro TO_SEQUENCE()
+            constexpr auto NDimY_ = NDimY;
+
+            return TO_SEQUENCE(scalars_per_access_arr, NDimY_);
+        }
+
+        template <typename TensorLengths, index_t VectorDimY, index_t ScalarPerVector>
+        using SpaceFillingCurve =
+            ck::SpaceFillingCurve<TensorLengths,
+                                  typename arithmetic_sequence_gen<0, NDimY, 1>::type,
+                                  decltype(GetScalarsPerAccess<VectorDimY, ScalarPerVector>())>;
+    };
+
+    template <typename YIndex, index_t... YSliceLengths>
+    struct LoadTraits : TraitsBase
+    {
+        using TraitsBase::NDimP;
+        using TraitsBase::NDimY;
 
         static_assert(NDimY == YIndex::Size() && NDimY == sizeof...(YSliceLengths),
                       "wrong! inconsistent # of dimension");
 
-        static_assert(TileWindow::HasStaticTileDistribution(),
-                      "wrong! assume static tile distribution");
+        using typename TraitsBase::DataType;
 
-        constexpr index_t thread_element_size =
-            container_reduce(y_slice_lengths, math::multiplies{}, 1);
+        using ThreadBuffer =
+            StaticBuffer<AddressSpaceEnum::Vgpr,
+                         DataType,
+                         container_reduce(Sequence<YSliceLengths...>{}, math::multiplies{}, 1),
+                         true>;
 
-        StaticBuffer<AddressSpaceEnum::Vgpr, OutDataType, thread_element_size, true> thread_buf;
+        private:
+        static constexpr auto GetVectorDimYScalarPerVector()
+        {
+            auto [ys_vector_lengths, ys_vector_strides] =
+                TileWindowWithStaticDistribution::GetWindowAdaptorYsSafeVectorLengthStrides();
 
-        constexpr auto tmp = [&y_slice_lengths]() {
-            const auto [ys_vector_lengths, ys_vector_strides] =
-                TileWindow::GetWindowAdaptorYsSafeVectorLengthStrides();
-
-            index_t VectorDimY      = 0;
-            index_t ScalarPerVector = 1;
+            index_t VectorDimY_      = 0;
+            index_t ScalarPerVector_ = 1;
 
             for(index_t i = 0; i < NDimY; ++i)
             {
-                if(ys_vector_strides[i] == 1 && ys_vector_lengths[i] > ScalarPerVector)
+                if(ys_vector_strides[i] == 1 && ys_vector_lengths[i] > ScalarPerVector_)
                 {
-                    ScalarPerVector = math::gcd(ys_vector_lengths[i], y_slice_lengths[i]);
-                    VectorDimY      = i;
+                    ScalarPerVector_ =
+                        math::gcd(ys_vector_lengths[i], Sequence<YSliceLengths...>{}[i]);
+                    VectorDimY_ = i;
                 }
             }
 
-            return make_tuple(VectorDimY, ScalarPerVector);
-        }();
+            return make_tuple(VectorDimY_, ScalarPerVector_);
+        }
 
-        constexpr index_t VectorDimY      = tmp.template At<0>();
-        constexpr index_t ScalarPerVector = tmp.template At<1>();
+        public:
+        static constexpr index_t VectorDimY      = GetVectorDimYScalarPerVector().template At<0>();
+        static constexpr index_t ScalarPerVector = GetVectorDimYScalarPerVector().template At<1>();
 
-        // FIXME
-        using DimAccessOrder = typename arithmetic_sequence_gen<0, NDimY, 1>::type;
-
-        constexpr auto scalars_per_access_arr = generate_array(
-            [&](auto i) { return (i == VectorDimY) ? ScalarPerVector : 1; }, Number<NDimY>{});
-
-        constexpr auto scalars_per_access = TO_SEQUENCE(scalars_per_access_arr, NDimY);
-
-        using vector_type_t = vector_type_maker_t<OutDataType, ScalarPerVector>;
+        using vector_type_t = typename TraitsBase::template vector_type_t<ScalarPerVector>;
         using vector_t      = typename vector_type_t::type;
 
-        using SFC_Ys = SpaceFillingCurve<decltype(y_slice_lengths),
-                                         DimAccessOrder,
-                                         decltype(scalars_per_access)>;
+        public:
+        using SpaceFillingCurve = typename TraitsBase::
+            template SpaceFillingCurve<Sequence<YSliceLengths...>, VectorDimY, ScalarPerVector>;
+    };
+
+    template <typename OtherDataType>
+    struct StoreTraits : TraitsBase
+    {
+        static_assert(is_same_v<OtherDataType, DataType>, "wrong!");
+
+        using TraitsBase::NDimP;
+        using TraitsBase::NDimY;
+
+        using typename TraitsBase::DataType;
+
+        private:
+        static constexpr auto GetVectorDimYScalarPerVector()
+        {
+            const auto [ys_vector_lengths, ys_vector_strides] =
+                TileWindowWithStaticDistribution::GetWindowAdaptorYsSafeVectorLengthStrides();
+
+            index_t VectorDimY_      = 0;
+            index_t ScalarPerVector_ = 1;
+
+            for(index_t i = 0; i < NDimY; ++i)
+            {
+                if(ys_vector_strides[i] == 1 && ys_vector_lengths[i] > ScalarPerVector_)
+                {
+                    ScalarPerVector_ = ys_vector_lengths[i];
+                    VectorDimY_      = i;
+                }
+            }
+
+            return make_tuple(VectorDimY_, ScalarPerVector_);
+        }
+
+        public:
+        static constexpr index_t VectorDimY      = GetVectorDimYScalarPerVector().template At<0>();
+        static constexpr index_t ScalarPerVector = GetVectorDimYScalarPerVector().template At<1>();
+
+        using vector_type_t = typename TraitsBase::template vector_type_t<ScalarPerVector>;
+        using vector_t      = typename vector_type_t::type;
+
+        private:
+        static constexpr auto GetSpaceFillingCurve()
+        {
+            constexpr auto tile_dstr = TileDstr{};
+
+            constexpr auto thread_tensor_lengths_ys =
+                to_sequence(tile_dstr.GetYs2DDescriptor().GetLengths());
+
+            return
+                typename TraitsBase::template SpaceFillingCurve<decltype(thread_tensor_lengths_ys),
+                                                                VectorDimY,
+                                                                ScalarPerVector>{};
+        }
+
+        public:
+        using SpaceFillingCurve = decltype(GetSpaceFillingCurve());
+    };
+
+    template <typename YIndex, index_t... YSliceLengths>
+    __device__ auto LoadSlicedThreadData(const YIndex& ys_slice_origin, Sequence<YSliceLengths...>)
+    {
+        using Traits = LoadTraits<YIndex, YSliceLengths...>;
+
+        constexpr index_t NDimP = Traits::NDimP;
+        constexpr index_t NDimY = Traits::NDimY;
+
+        typename Traits::ThreadBuffer thread_buf;
+
+        constexpr index_t VectorDimY      = Traits::VectorDimY;
+        constexpr index_t ScalarPerVector = Traits::ScalarPerVector;
+
+        using vector_type_t = typename Traits::vector_type_t;
+        using vector_t      = typename vector_type_t::type;
+
+        using SFC_Ys = typename Traits::SpaceFillingCurve;
 
         constexpr index_t num_access = SFC_Ys::GetNumOfAccess();
 
@@ -229,6 +324,8 @@ struct TileWindowWithStaticDistribution
         const auto ps_ys_slice_origin = container_concat(Array<index_t, NDimP>{0}, ys_slice_origin);
 
         (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(ps_ys_slice_origin);
+
+        constexpr auto tile_dstr = TileDstr{};
 
         // loop over thread tensor space [y0, y1, ...]
         static_for<0, num_access, 1>{}([&](auto iAccess) {
@@ -252,7 +349,7 @@ struct TileWindowWithStaticDistribution
 
                 constexpr index_t d = tile_dstr.GetYs2DDescriptor().CalculateOffset(idx_ys);
 
-                thread_buf.template At<d>() = vec.template AsType<OutDataType>()[j];
+                thread_buf.template At<d>() = vec.template AsType<typename Traits::DataType>()[j];
             });
 
             // move thread coordinate
@@ -285,62 +382,26 @@ struct TileWindowWithStaticDistribution
     }
 
     template <typename DataType_>
-    __device__ void store(const StaticDistributedTensor<DataType_, TileDstr>& dstr_tensor)
+    __device__ void Store(const StaticDistributedTensor<DataType_, TileDstr>& dstr_tensor)
     {
-        using OutDataType = remove_cvref_t<typename BottomTensorView_::DataType>;
-        using TileWindow  = TileWindowWithStaticDistribution;
+        using Traits = StoreTraits<DataType_>;
 
-        static_assert(is_same_v<remove_cvref_t<DataType_>, OutDataType>, "wrong!");
-        static_assert(TileWindow::HasStaticTileDistribution(), "wrong!");
+        constexpr index_t NDimP = Traits::NDimP;
+        constexpr index_t NDimY = Traits::NDimY;
 
-        constexpr auto tile_dstr = TileDstr{};
+        constexpr index_t VectorDimY      = Traits::VectorDimY;
+        constexpr index_t ScalarPerVector = Traits::ScalarPerVector;
 
-        constexpr auto thread_tensor_lengths_ys =
-            to_sequence(tile_dstr.GetYs2DDescriptor().GetLengths());
-
-        constexpr index_t NDimP = TileDstr::GetNumOfDimensionP();
-        constexpr index_t NDimY = TileDstr::GetNumOfDimensionY();
-
-        constexpr auto tmp = []() {
-            const auto [ys_vector_lengths, ys_vector_strides] =
-                TileWindow::GetWindowAdaptorYsSafeVectorLengthStrides();
-
-            index_t VectorDimY      = 0;
-            index_t ScalarPerVector = 1;
-
-            for(index_t i = 0; i < NDimY; ++i)
-            {
-                if(ys_vector_strides[i] == 1 && ys_vector_lengths[i] > ScalarPerVector)
-                {
-                    ScalarPerVector = ys_vector_lengths[i];
-                    VectorDimY      = i;
-                }
-            }
-
-            return make_tuple(VectorDimY, ScalarPerVector);
-        }();
-
-        constexpr index_t VectorDimY      = tmp.template At<0>();
-        constexpr index_t ScalarPerVector = tmp.template At<1>();
-
-        // FIXME:
-        using DimAccessOrder = typename arithmetic_sequence_gen<0, NDimY, 1>::type;
-
-        constexpr auto scalars_per_access_arr = generate_array(
-            [&](auto i) { return (i == VectorDimY) ? ScalarPerVector : 1; }, Number<NDimY>{});
-
-        constexpr auto scalars_per_access = TO_SEQUENCE(scalars_per_access_arr, NDimY);
-
-        using vector_type_t = vector_type_maker_t<OutDataType, ScalarPerVector>;
+        using vector_type_t = typename Traits::vector_type_t;
         using vector_t      = typename vector_type_t::type;
 
-        using SFC_Ys = SpaceFillingCurve<decltype(thread_tensor_lengths_ys),
-                                         DimAccessOrder,
-                                         decltype(scalars_per_access)>;
+        using SFC_Ys = typename Traits::SpaceFillingCurve;
 
         constexpr index_t num_access = SFC_Ys::GetNumOfAccess();
 
         static_assert(num_access > 0, "wrong! num_access should be larger than 0");
+
+        constexpr auto tile_dstr = TileDstr{};
 
         // loop over thread tensor space [y0, y1, ...]
         static_for<0, num_access, 1>{}([&](auto iAccess) {
@@ -359,7 +420,7 @@ struct TileWindowWithStaticDistribution
 
                 constexpr index_t d = tile_dstr.GetYs2DDescriptor().CalculateOffset(idx_ys);
 
-                vec.template AsType<OutDataType>()(j) =
+                vec.template AsType<typename Traits::DataType>()(j) =
                     dstr_tensor.GetThreadBuffer().template At<d>();
             });
 

@@ -23,7 +23,7 @@ store_tile(TileWindowWithStaticDistribution<BottomTensorView_, WindowLengths_, T
                tile_window,
            const StaticDistributedTensor<DataType_, TileDistribution_>& dstr_tensor)
 {
-    tile_window.store(dstr_tensor);
+    tile_window.Store(dstr_tensor);
 }
 
 } // namespace tile_program

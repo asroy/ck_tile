@@ -37,7 +37,7 @@ __device__ auto load_sliced_thread_data_from_tile_window(
     const YIndex& ys_slice_origin,
     Sequence<YSliceLengths...> y_slice_lengths)
 {
-    return tile_window.load_sliced_thread_data(ys_slice_origin, y_slice_lengths);
+    return tile_window.LoadSlicedThreadData(ys_slice_origin, y_slice_lengths);
 }
 
 } // namespace detail
