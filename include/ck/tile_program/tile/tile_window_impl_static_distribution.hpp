@@ -292,6 +292,8 @@ struct TileWindowWithStaticDistribution
             template SpaceFillingCurve<Sequence<YSliceLengths...>, VectorDimY, ScalarPerVector>;
 
         static constexpr index_t NumAccess = SpaceFillingCurve::GetNumOfAccess();
+
+        static_assert(0 < NumAccess, "Wrong! NumAccess should be larger than 0");
     };
 
     struct StoreTraits : TraitsBase
@@ -347,6 +349,8 @@ struct TileWindowWithStaticDistribution
         using SpaceFillingCurve = decltype(GetSpaceFillingCurve());
 
         static constexpr index_t NumAccess = SpaceFillingCurve::GetNumOfAccess();
+
+        static_assert(0 < NumAccess, "Wrong! NumAccess should be larger than 0");
     };
 
     static constexpr index_t NumAccessForLoad =
@@ -372,9 +376,7 @@ struct TileWindowWithStaticDistribution
 
         using SFC_Ys = typename Traits::SpaceFillingCurve;
 
-        constexpr index_t num_access = SFC_Ys::GetNumOfAccess();
-
-        static_assert(num_access > 0, "wrong! num_access should be larger than 0");
+        constexpr index_t num_access = Traits::NumAccess;
 
         // move to slice origin
         const auto ps_ys_slice_origin = container_concat(Array<index_t, NDimP>{0}, ys_slice_origin);
@@ -455,9 +457,7 @@ struct TileWindowWithStaticDistribution
 
         using SFC_Ys = typename Traits::SpaceFillingCurve;
 
-        constexpr index_t num_access = SFC_Ys::GetNumOfAccess();
-
-        static_assert(num_access > 0, "wrong! num_access should be larger than 0");
+        constexpr index_t num_access = Traits::NumAccess;
 
         constexpr auto tile_dstr = TileDstr{};
 
