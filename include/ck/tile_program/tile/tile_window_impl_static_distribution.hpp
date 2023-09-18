@@ -237,7 +237,6 @@ struct TileWindowWithStaticDistribution
         using vector_type_t = typename TraitsBase::template vector_type_t<ScalarPerVector>;
         using vector_t      = typename vector_type_t::type;
 
-        public:
         using SpaceFillingCurve = typename TraitsBase::
             template SpaceFillingCurve<Sequence<YSliceLengths...>, VectorDimY, ScalarPerVector>;
     };
