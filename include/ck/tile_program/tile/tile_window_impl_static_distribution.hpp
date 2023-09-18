@@ -21,27 +21,19 @@ struct static_vector
     using const_reference = const value_type&;
     using size_type       = index_t;
 
-    static_vector() = default;
+    __host__ __device__ static_vector() = default;
 
-    static_vector(const static_vector&) = default;
+    __host__ __device__ static_vector(const static_vector&) = default;
 
-    constexpr reference front() { return values_[0]; }
+    __host__ __device__ void push_back(const Value& value) { values_(size_++) = value; }
 
-    constexpr const_reference front() const { return values_[0]; }
+    __host__ __device__ reference operator[](size_type idx) { return values_[idx]; }
 
-    constexpr reference back() { return values_[size_ - 1]; }
+    __host__ __device__ const_reference operator[](size_type idx) const { return values_[idx]; }
 
-    constexpr const_reference back() const { return values_[size_ - 1]; }
+    __host__ __device__ size_type size() const { return size_; }
 
-    constexpr void push_back(const Value& value) { return values_[size_++] = value; }
-
-    constexpr reference operator[](size_type idx) { return values_[idx]; }
-
-    constexpr const_reference operator[](size_type idx) const { return values_[idx]; }
-
-    constexpr size_type size() const { return size_; }
-
-    static constexpr size_type capacity() { return Capacity; }
+    __host__ __device__ static constexpr size_type capacity() { return Capacity; }
 
     private:
     Array<Value, Capacity> values_ = {};
@@ -56,6 +48,7 @@ struct PreComputedCoords : static_vector<Coordinate, NumAccess>
 template <typename Coordinate>
 struct PreComputedCoords<Coordinate, 0>
 {
+    __host__ __device__ static constexpr index_t capacity() { return 0; }
 };
 
 } // namespace detail
@@ -237,11 +230,6 @@ struct TileWindowWithStaticDistribution
         static_assert(0 < NumAccess, "Wrong! NumAccess should be larger than 0");
     };
 
-    static constexpr index_t NumAccessForLoad =
-        StoreTraits::NumAccess; /// TODO: enlarge this number if unnecessary
-    static constexpr index_t NumAccessForStore = StoreTraits::NumAccess;
-    static constexpr index_t MaxNumAccess      = math::max(NumAccessForLoad, NumAccessForStore);
-
     __device__ constexpr TileWindowWithStaticDistribution() = default;
 
     __device__ constexpr TileWindowWithStaticDistribution(
@@ -268,6 +256,43 @@ struct TileWindowWithStaticDistribution
 
         bottom_tensor_thread_coord_ = make_tensor_coordinate(
             bottom_tensor_view_.GetTensorDescriptor(), bottom_tensor_thread_origin_idx);
+
+        if constexpr (is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore>) {
+            using Traits = StoreTraits;
+
+            constexpr index_t NDimP = Traits::NDimP;
+
+            using SFC_Ys = typename Traits::SpaceFillingCurve;
+
+            constexpr index_t num_access = Traits::NumAccess;
+
+            // loop over thread tensor space [y0, y1, ...]
+            static_for<0, num_access, 1>{}([&](auto iAccess) {
+                // store current thread coordinate
+                pre_computed_coords_.push_back((*this).GetBottomTensorThreadCoordinate());
+
+                // move thread coordinate
+                if constexpr(iAccess.value != num_access - 1)
+                {
+                    constexpr auto idx_diff_ys = SFC_Ys::GetForwardStep(iAccess);
+
+                    constexpr auto idx_diff_ps_ys =
+                        container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
+
+                    (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+                }
+            });
+
+            // move thread coordinate back to origin
+            {
+                constexpr auto idx_diff_ys =
+                    SFC_Ys::GetStepBetween(Number<num_access - 1>{}, Number<0>{});
+
+                constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
+
+                (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+            }
+        }
     }
 
     __device__ static constexpr index_t GetNumOfDimension() { return NDimBottomTensor; }
@@ -387,10 +412,18 @@ struct TileWindowWithStaticDistribution
 
         // loop over thread tensor space [y0, y1, ...]
         static_for<0, num_access, 1>{}([&](auto iAccess) {
+            const auto thread_coordinate = [this, iAccess]() {
+               if constexpr(is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore>) {
+                   return pre_computed_coords_[iAccess];
+               } else {
+                   return (*this).GetBottomTensorThreadCoordinate();
+               }
+            }();
+
             // read from bottom tensor
             const vector_t vec_value =
                 (*this).GetBottomTensorView().template GetVectorizedElements<vector_t>(
-                    (*this).GetBottomTensorThreadCoordinate());
+                    thread_coordinate);
 
             const vector_type_t vec{vec_value};
 
@@ -411,7 +444,7 @@ struct TileWindowWithStaticDistribution
             });
 
             // move thread coordinate
-            if constexpr(iAccess.value != num_access - 1)
+            if constexpr(!is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore> && iAccess.value != num_access - 1)
             {
                 constexpr auto idx_diff_ys = SFC_Ys::GetForwardStep(iAccess);
 
@@ -422,19 +455,21 @@ struct TileWindowWithStaticDistribution
             }
         });
 
-        // move thread coordinate back to origin
-        {
-            constexpr auto idx_diff_ys =
-                SFC_Ys::GetStepBetween(Number<num_access - 1>{}, Number<0>{});
+        if constexpr(!is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore>) {
+            // move thread coordinate back to origin
+            {
+                constexpr auto idx_diff_ys =
+                    SFC_Ys::GetStepBetween(Number<num_access - 1>{}, Number<0>{});
 
-            constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
+                constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
-            (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+                (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+            }
+
+            // move back to origin
+            (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(MultiIndex<NDimP + NDimY>{0} -
+                                                                     ps_ys_slice_origin);
         }
-
-        // move back to origin
-        (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(MultiIndex<NDimP + NDimY>{0} -
-                                                                 ps_ys_slice_origin);
 
         return thread_buf;
     }
@@ -532,7 +567,9 @@ struct TileWindowWithStaticDistribution
     //    thread window coordinate
     WindowAdaptorCoord window_adaptor_thread_coord_;
 
-    detail::PreComputedCoords<BottomTensorCoord, MaxNumAccess> pre_computed_coords_;
+    static constexpr index_t MaxNumPreComputedCoords = (ComputeMode{} == TileWindowComputeMode::Normal{} ? 0: StoreTraits::NumAccess);
+
+    detail::PreComputedCoords<BottomTensorCoord, MaxNumPreComputedCoords> pre_computed_coords_;
 };
 
 // TODO: use strategy
