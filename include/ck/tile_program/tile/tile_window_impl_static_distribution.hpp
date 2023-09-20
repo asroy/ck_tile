@@ -458,7 +458,7 @@ struct TileWindowWithStaticDistribution
 
         // loop over thread tensor space [y0, y1, ...]
         static_for<0, NumCoords, 1>{}([&](auto iCoord) {
-            // FIXME: use structure binding (to be captured later) if compiled in C++20
+            /// FIXME: use structure binding (to be captured later) if compiled in C++20
             auto window_adaptor_thread_coord = pre_computed_coords_[iCoord].template At<0>();
             auto bottom_tensor_thread_coord  = pre_computed_coords_[iCoord].template At<1>();
 
