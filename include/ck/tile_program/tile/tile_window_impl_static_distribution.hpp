@@ -64,7 +64,7 @@ struct TileWindowWithStaticDistribution
             constexpr auto scalars_per_access_arr = generate_array(
                 [&](auto i) { return (i == VectorDimY) ? ScalarPerVector : 1; }, Number<NDimY>{});
 
-            /// FIXME: add non-automatic storage argument support to macro TO_SEQUENCE()
+            /// TODO: add non-automatic storage argument support to macro TO_SEQUENCE()
             constexpr auto NDimY_ = NDimY;
 
             return TO_SEQUENCE(scalars_per_access_arr, NDimY_);
@@ -458,7 +458,7 @@ struct TileWindowWithStaticDistribution
 
         // loop over thread tensor space [y0, y1, ...]
         static_for<0, NumCoords, 1>{}([&](auto iCoord) {
-            /// FIXME: use structure binding (to be captured later) if compiled in C++20
+            /// TODO: use structure binding (to be captured later) if compiled in C++20
             auto window_adaptor_thread_coord = pre_computed_coords_[iCoord].template At<0>();
             auto bottom_tensor_thread_coord  = pre_computed_coords_[iCoord].template At<1>();
 
@@ -516,7 +516,7 @@ struct TileWindowWithStaticDistribution
     // origin ([x0', x1', ...]) of window on bottom tensor
     BottomTensorIndex window_origin_;
 
-    /// FIXME: remove bottom_tensor_thread_coord_ after
+    /// TODO: remove bottom_tensor_thread_coord_ after
     /// LoadSlicedThreadData() share almost same implementation with Store()
     // per-thread coordinate for bottom tensor
     BottomTensorCoord bottom_tensor_thread_coord_;
@@ -526,7 +526,7 @@ struct TileWindowWithStaticDistribution
     //   2. thread descriptor for thread tensor in register: [y0, y1, ...] ==> [d]
     TileDstr tile_dstr_;
 
-    /// FIXME: remove window_adaptor_thread_coord_ after
+    /// TODO: remove window_adaptor_thread_coord_ after
     /// LoadSlicedThreadData() share almost same implementation with Store()
     //    thread window coordinate
     WindowAdaptorCoord window_adaptor_thread_coord_;
