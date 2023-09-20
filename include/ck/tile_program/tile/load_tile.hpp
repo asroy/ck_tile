@@ -29,14 +29,14 @@ namespace detail {
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
-          typename ComputeMode_,
+          index_t HintNumAccessPerCoord_,
           typename YIndex,
           index_t... YSliceLengths>
 __device__ auto load_sliced_thread_data_from_tile_window(
     TileWindowWithStaticDistribution<BottomTensorView_,
                                      WindowLengths_,
                                      TileDistribution_,
-                                     ComputeMode_>& tile_window,
+                                     HintNumAccessPerCoord_>& tile_window,
     const YIndex& ys_slice_origin,
     Sequence<YSliceLengths...> y_slice_lengths)
 {
@@ -48,18 +48,20 @@ __device__ auto load_sliced_thread_data_from_tile_window(
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
-          typename ComputeMode_>
+          index_t HintNumAccessPerCoord_>
 __device__ auto load_tile(TileWindowWithStaticDistribution<BottomTensorView_,
                                                            WindowLengths_,
                                                            TileDistribution_,
-                                                           ComputeMode_>& tile_window)
+                                                           HintNumAccessPerCoord_>& tile_window)
 {
     using DataType         = remove_cvref_t<typename BottomTensorView_::DataType>;
     using BottomTensorView = remove_cvref_t<BottomTensorView_>;
     using WindowLengths    = remove_cvref_t<WindowLengths_>;
     using TileDstr         = remove_cvref_t<TileDistribution_>;
-    using TileWindow =
-        TileWindowWithStaticDistribution<BottomTensorView, WindowLengths, TileDstr, ComputeMode_>;
+    using TileWindow       = TileWindowWithStaticDistribution<BottomTensorView,
+                                                        WindowLengths,
+                                                        TileDstr,
+                                                        HintNumAccessPerCoord_>;
 
     static_assert(is_known_at_compile_time<WindowLengths>::value,
                   "wrong! lengths should be static");

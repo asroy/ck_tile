@@ -8,14 +8,13 @@
 #include "ck/tensor_description/tensor_adaptor_coordinate.hpp"
 
 #include "ck/tile_program/tile/tile_distribution.hpp"
-#include "ck/tile_program/tile/tile_window_compute_mode.hpp"
 
 namespace ck {
 namespace tile_program {
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename StaticTileDistribution_,
-          typename ComputeMode>
+          index_t HintNumAccessPerCoord_>
 struct TileWindowWithStaticDistribution
 {
     using BottomTensorView = remove_reference_t<BottomTensorView_>;
@@ -189,7 +188,9 @@ struct TileWindowWithStaticDistribution
         static_assert(0 < NumAccess, "Wrong! NumAccess should be larger than 0");
     };
 
-    static constexpr index_t NumAccessPerCoord = 1;
+    static constexpr index_t NumAccessPerCoord =
+        (0 < HintNumAccessPerCoord_ ? math::min(StoreTraits::NumAccess, HintNumAccessPerCoord_)
+                                    : StoreTraits::NumAccess);
 
     static constexpr index_t NumCoords = StoreTraits::NumAccess / NumAccessPerCoord;
 
@@ -224,6 +225,9 @@ struct TileWindowWithStaticDistribution
         // future Store() calls (might allocate more registers)
         {
             using Traits = StoreTraits;
+
+            static_assert(Traits::NumAccess % NumAccessPerCoord == 0,
+                          "# of access is not divisible by HintNumAccessPerCoord");
 
             using SFC_Ys = typename Traits::SpaceFillingCurve;
 
@@ -512,6 +516,8 @@ struct TileWindowWithStaticDistribution
     // origin ([x0', x1', ...]) of window on bottom tensor
     BottomTensorIndex window_origin_;
 
+    /// FIXME: remove bottom_tensor_thread_coord_ & window_adaptor_thread_coord_ after
+    /// LoadSlicedThreadData() share almost same implementation with Store()
     // per-thread coordinate for bottom tensor
     BottomTensorCoord bottom_tensor_thread_coord_;
 
@@ -530,34 +536,35 @@ struct TileWindowWithStaticDistribution
 template <typename TensorView_,
           typename WindowLengths_,
           typename StaticTileDistribution_,
-          typename ComputeMode = TileWindowComputeMode::Normal>
+          index_t HintNumAccessPerCoord_ = -1>
 __device__ constexpr auto
 make_tile_window(const TensorView_& tensor_view,
                  const WindowLengths_& window_lengths,
                  const MultiIndex<TensorView_::GetNumOfDimension()>& origin,
                  const StaticTileDistribution_& tile_distribution,
-                 ComputeMode = {})
+                 Number<HintNumAccessPerCoord_> = {})
 {
     return TileWindowWithStaticDistribution<remove_cvref_t<TensorView_>,
                                             remove_cvref_t<WindowLengths_>,
                                             remove_cvref_t<StaticTileDistribution_>,
-                                            ComputeMode>{
+                                            HintNumAccessPerCoord_>{
         tensor_view, window_lengths, origin, tile_distribution};
 }
 
 template <typename TensorView_,
           typename WindowLengths_,
           typename StaticTileDistribution_,
-          typename ComputeMode>
+          index_t HintNumAccessPerCoord_>
 __device__ void move_tile_window(
     TileWindowWithStaticDistribution<TensorView_,
                                      WindowLengths_,
                                      StaticTileDistribution_,
-                                     ComputeMode>& window,
+                                     HintNumAccessPerCoord_>& window,
     const MultiIndex<TileWindowWithStaticDistribution<TensorView_,
                                                       WindowLengths_,
                                                       StaticTileDistribution_,
-                                                      ComputeMode>::GetNumOfDimension()>& step)
+                                                      HintNumAccessPerCoord_>::GetNumOfDimension()>&
+        step)
 {
     window.window_origin_ += step;
 
