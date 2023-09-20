@@ -516,7 +516,7 @@ struct TileWindowWithStaticDistribution
     // origin ([x0', x1', ...]) of window on bottom tensor
     BottomTensorIndex window_origin_;
 
-    /// FIXME: remove bottom_tensor_thread_coord_ & window_adaptor_thread_coord_ after
+    /// FIXME: remove bottom_tensor_thread_coord_ after
     /// LoadSlicedThreadData() share almost same implementation with Store()
     // per-thread coordinate for bottom tensor
     BottomTensorCoord bottom_tensor_thread_coord_;
@@ -526,6 +526,8 @@ struct TileWindowWithStaticDistribution
     //   2. thread descriptor for thread tensor in register: [y0, y1, ...] ==> [d]
     TileDstr tile_dstr_;
 
+    /// FIXME: remove window_adaptor_thread_coord_ after
+    /// LoadSlicedThreadData() share almost same implementation with Store()
     //    thread window coordinate
     WindowAdaptorCoord window_adaptor_thread_coord_;
 
