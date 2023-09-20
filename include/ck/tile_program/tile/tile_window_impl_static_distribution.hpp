@@ -12,47 +12,6 @@
 
 namespace ck {
 namespace tile_program {
-namespace detail {
-template <typename Value, index_t Capacity>
-struct static_vector
-{
-    using value_type      = Value;
-    using reference       = value_type&;
-    using const_reference = const value_type&;
-    using size_type       = index_t;
-
-    __host__ __device__ static_vector() = default;
-
-    __host__ __device__ static_vector(const static_vector&) = default;
-
-    __host__ __device__ void push_back(const Value& value) { values_(size_++) = value; }
-
-    __host__ __device__ reference operator[](size_type idx) { return values_(idx); }
-
-    __host__ __device__ const_reference operator[](size_type idx) const { return values_[idx]; }
-
-    __host__ __device__ size_type size() const { return size_; }
-
-    __host__ __device__ static constexpr size_type capacity() { return Capacity; }
-
-    private:
-    Array<Value, Capacity> values_ = {};
-    index_t size_                  = 0;
-};
-
-template <typename Coordinate, index_t NumAccess>
-struct PreComputedCoords : static_vector<Coordinate, NumAccess>
-{
-};
-
-template <typename Coordinate>
-struct PreComputedCoords<Coordinate, 0>
-{
-    __host__ __device__ static constexpr index_t capacity() { return 0; }
-};
-
-} // namespace detail
-
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename StaticTileDistribution_,
@@ -270,7 +229,7 @@ struct TileWindowWithStaticDistribution
             // loop over thread tensor space [y0, y1, ...]
             static_for<0, num_access, 1>{}([&](auto iAccess) {
                 // store current thread coordinate
-                pre_computed_coords_.push_back((*this).GetBottomTensorThreadCoordinate());
+                pre_computed_coords_(iAccess) = GetBottomTensorThreadCoordinate();
 
                 // move thread coordinate
                 if constexpr(iAccess.value != num_access - 1)
@@ -280,7 +239,7 @@ struct TileWindowWithStaticDistribution
                     constexpr auto idx_diff_ps_ys =
                         container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
-                    (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+                    MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
                 }
             });
 
@@ -292,7 +251,7 @@ struct TileWindowWithStaticDistribution
                 constexpr auto idx_diff_ps_ys =
                     container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
-                (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+                MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
             }
         }
     }
@@ -408,7 +367,7 @@ struct TileWindowWithStaticDistribution
         // move to slice origin
         const auto ps_ys_slice_origin = container_concat(Array<index_t, NDimP>{0}, ys_slice_origin);
 
-        (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(ps_ys_slice_origin);
+        MoveWindowAdaptorAndBottomTensorThreadCoordinate(ps_ys_slice_origin);
 
         constexpr auto tile_dstr = TileDstr{};
 
@@ -416,8 +375,8 @@ struct TileWindowWithStaticDistribution
         static_for<0, num_access, 1>{}([&](auto iAccess) {
             // read from bottom tensor
             const vector_t vec_value =
-                (*this).GetBottomTensorView().template GetVectorizedElements<vector_t>(
-                    (*this).GetBottomTensorThreadCoordinate());
+                GetBottomTensorView().template GetVectorizedElements<vector_t>(
+                    GetBottomTensorThreadCoordinate());
 
             const vector_type_t vec{vec_value};
 
@@ -445,7 +404,7 @@ struct TileWindowWithStaticDistribution
                 constexpr auto idx_diff_ps_ys =
                     container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
-                (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+                MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
             }
         });
 
@@ -456,12 +415,12 @@ struct TileWindowWithStaticDistribution
 
             constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
-            (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+            MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
         }
 
         // move back to origin
-        (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(MultiIndex<NDimP + NDimY>{0} -
-                                                                 ps_ys_slice_origin);
+        MoveWindowAdaptorAndBottomTensorThreadCoordinate(MultiIndex<NDimP + NDimY>{0} -
+                                                         ps_ys_slice_origin);
 
         return thread_buf;
     }
@@ -520,13 +479,12 @@ struct TileWindowWithStaticDistribution
                 }
                 else
                 {
-                    return (*this).GetBottomTensorThreadCoordinate();
+                    return GetBottomTensorThreadCoordinate();
                 }
             }();
 
             // write into bottom tensor
-            (*this).GetBottomTensorView().template SetVectorizedElements<vector_t>(thread_coord,
-                                                                                   vec_value);
+            GetBottomTensorView().template SetVectorizedElements<vector_t>(thread_coord, vec_value);
 
             // move thread coordinate
             if constexpr(!is_same_v<ComputeMode, TileWindowComputeMode::PreComputeCoordsForStore> &&
@@ -537,7 +495,7 @@ struct TileWindowWithStaticDistribution
                 constexpr auto idx_diff_ps_ys =
                     container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
-                (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+                MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
             }
         });
 
@@ -549,7 +507,7 @@ struct TileWindowWithStaticDistribution
 
             constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
-            (*this).MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
+            MoveWindowAdaptorAndBottomTensorThreadCoordinate(idx_diff_ps_ys);
         }
     }
 
@@ -574,10 +532,7 @@ struct TileWindowWithStaticDistribution
     //    thread window coordinate
     WindowAdaptorCoord window_adaptor_thread_coord_;
 
-    static constexpr index_t MaxNumPreComputedCoords =
-        (ComputeMode{} == TileWindowComputeMode::Normal{} ? 0 : StoreTraits::NumAccess);
-
-    detail::PreComputedCoords<BottomTensorCoord, MaxNumPreComputedCoords> pre_computed_coords_;
+    Array<BottomTensorCoord, StoreTraits::NumAccess> pre_computed_coords_;
 };
 
 // TODO: use strategy
