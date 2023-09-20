@@ -295,15 +295,26 @@ struct TileWindowWithStaticDistribution
     __device__ void
     MoveWindowAdaptorAndBottomTensorThreadCoordinate(const AdaptorTopIndex& idx_diff_adaptor_top)
     {
+        MoveWindowAdaptorAndBottomTensorThreadCoordinate(
+            window_adaptor_thread_coord_, bottom_tensor_thread_coord_, idx_diff_adaptor_top);
+    }
+
+    // move thread's window adaptor coordinate and bottom tensor coordinate
+    // [p0, p1, ..., y0, y1, ...] ==> [x0, x1, ...] ==> [x0', x1', ...] ==> [offset]
+    __device__ void MoveWindowAdaptorAndBottomTensorThreadCoordinate(
+        WindowAdaptorCoord& window_adaptor_thread_coord,
+        BottomTensorCoord& bottom_tensor_thread_coord,
+        const AdaptorTopIndex& idx_diff_adaptor_top) const
+    {
         Array<index_t, NDimBottomTensor> idx_diff_adaptor_bottom;
 
         move_tensor_adaptor_coordinate(tile_dstr_.GetPsYs2XsAdaptor(),
-                                       window_adaptor_thread_coord_,
+                                       window_adaptor_thread_coord,
                                        idx_diff_adaptor_top,
                                        idx_diff_adaptor_bottom);
 
         move_tensor_coordinate(bottom_tensor_view_.GetTensorDescriptor(),
-                               bottom_tensor_thread_coord_,
+                               bottom_tensor_thread_coord,
                                idx_diff_adaptor_bottom);
     }
 
