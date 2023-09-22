@@ -27,8 +27,7 @@ store_tile(TileWindowWithStaticLengths<BottomTensorView_, WindowLengths_>& tile_
     using BottomTensorView = remove_cvref_t<BottomTensorView_>;
     using WindowLengths    = remove_cvref_t<WindowLengths_>;
     using TileDstr         = remove_cvref_t<TileDistribution_>;
-    using TileWindow =
-        TileWindowWithStaticDistribution<BottomTensorView, WindowLengths, TileDstr, -1>;
+    using TileWindow = TileWindowWithStaticDistribution<BottomTensorView, WindowLengths, TileDstr>;
 
     static_assert(is_same_v<remove_cvref_t<DataType_>, DataType>, "wrong!");
 

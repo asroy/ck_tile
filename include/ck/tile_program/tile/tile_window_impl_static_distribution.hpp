@@ -14,7 +14,7 @@ namespace tile_program {
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename StaticTileDistribution_,
-          index_t HintNumAccessPerCoord_>
+          index_t HintNumCoords_ = 1>
 struct TileWindowWithStaticDistribution
 {
     using BottomTensorView = remove_reference_t<BottomTensorView_>;
@@ -188,11 +188,11 @@ struct TileWindowWithStaticDistribution
         static_assert(0 < NumAccess, "Wrong! NumAccess should be larger than 0");
     };
 
-    static constexpr index_t NumAccessPerCoord =
-        (0 < HintNumAccessPerCoord_ ? math::min(StoreTraits::NumAccess, HintNumAccessPerCoord_)
-                                    : StoreTraits::NumAccess);
+    static constexpr index_t NumCoords =
+        (0 < HintNumCoords_ ? math::min(StoreTraits::NumAccess, HintNumCoords_)
+                            : StoreTraits::NumAccess);
 
-    static constexpr index_t NumCoords = StoreTraits::NumAccess / NumAccessPerCoord;
+    static constexpr index_t NumAccessPerCoord = StoreTraits::NumAccess / NumCoords;
 
     __device__ constexpr TileWindowWithStaticDistribution() = default;
 
@@ -221,13 +221,13 @@ struct TileWindowWithStaticDistribution
         bottom_tensor_thread_coord_ = make_tensor_coordinate(
             bottom_tensor_view_.GetTensorDescriptor(), bottom_tensor_thread_origin_idx);
 
-        // pre-compute NumCoord (WindowAdaptorCoord, BottomTensorCoord) bundles to speed up
+        // pre-compute NumCoords (WindowAdaptorCoord, BottomTensorCoord) bundles to speed up
         // future Store() calls (might allocate more registers)
         {
             using Traits = StoreTraits;
 
-            static_assert(Traits::NumAccess % NumAccessPerCoord == 0,
-                          "# of access is not divisible by HintNumAccessPerCoord");
+            static_assert(Traits::NumAccess % NumCoords == 0,
+                          "# of access is not divisible by HintNumCoords_");
 
             using SFC_Ys = typename Traits::SpaceFillingCurve;
 
@@ -538,35 +538,34 @@ struct TileWindowWithStaticDistribution
 template <typename TensorView_,
           typename WindowLengths_,
           typename StaticTileDistribution_,
-          index_t HintNumAccessPerCoord_ = -1>
+          index_t HintNumCoords_ = 1>
 __device__ constexpr auto
 make_tile_window(const TensorView_& tensor_view,
                  const WindowLengths_& window_lengths,
                  const MultiIndex<TensorView_::GetNumOfDimension()>& origin,
                  const StaticTileDistribution_& tile_distribution,
-                 Number<HintNumAccessPerCoord_> = {})
+                 Number<HintNumCoords_> = {})
 {
     return TileWindowWithStaticDistribution<remove_cvref_t<TensorView_>,
                                             remove_cvref_t<WindowLengths_>,
                                             remove_cvref_t<StaticTileDistribution_>,
-                                            HintNumAccessPerCoord_>{
+                                            HintNumCoords_>{
         tensor_view, window_lengths, origin, tile_distribution};
 }
 
 template <typename TensorView_,
           typename WindowLengths_,
           typename StaticTileDistribution_,
-          index_t HintNumAccessPerCoord_>
+          index_t HintNumCoords_>
 __device__ void move_tile_window(
     TileWindowWithStaticDistribution<TensorView_,
                                      WindowLengths_,
                                      StaticTileDistribution_,
-                                     HintNumAccessPerCoord_>& window,
+                                     HintNumCoords_>& window,
     const MultiIndex<TileWindowWithStaticDistribution<TensorView_,
                                                       WindowLengths_,
                                                       StaticTileDistribution_,
-                                                      HintNumAccessPerCoord_>::GetNumOfDimension()>&
-        step)
+                                                      HintNumCoords_>::GetNumOfDimension()>& step)
 {
     window.window_origin_ += step;
 
