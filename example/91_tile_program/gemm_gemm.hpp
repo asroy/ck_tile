@@ -76,7 +76,7 @@ struct GemmGemm
 
         return b_lds_block_desc;
     }
-#elif 1
+#elif 0
     // fake XOR
     __device__ static constexpr auto MakeB1LdsBlockDescriptor()
     {
