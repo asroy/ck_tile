@@ -314,18 +314,18 @@ struct GemmGemm
                 static_for<0, k1_loops - 1, 1>{}([&](auto i) {
                     // acc1 += c0 * b1
                     const auto b1_block_tile_1 = load_tile(b1_dram_block_window);
-                    ps.block_sync_lds();
+                    block_sync_lds();
                     block_gemm1(acc1_block_tile,
                                 get_slice_tile(c0_block_tile, si{}, si{i * K1PerBlock, K1PerBlock}),
                                 b1_lds_block_window);
-                    ps.block_sync_lds();
+                    block_sync_lds();
                     move_tile_window(b1_dram_block_window, {0, kK1PerBlock});
                     store_tile(b1_lds_block_window, b1_block_tile_1);
                 });
             }
             // tail
             {
-                ps.block_sync_lds();
+                block_sync_lds();
                 block_gemm1(acc1_block_tile,
                             get_slice_tile(c0_block_tile,
                                            si{},
@@ -334,7 +334,7 @@ struct GemmGemm
             }
 
             move_tile_window(b0_dram_block_window, {kN0PerBlock, 0});
-            ps.block_sync_lds();
+            block_sync_lds();
             iN0 += kN0PerBlock;
 
         } while(iN0 < N0);
