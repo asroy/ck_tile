@@ -161,18 +161,18 @@ __device__ void block_tile_reduce(AccDistributedTensor_& acc_tensor,
     sweep_tile_span(spans[I0], [&](auto dstr_idx_i0) {
         constexpr auto acc_dstr_idx = make_tuple(dstr_idx_i0);
 
-        auto acc = acc_tensor.GetElementFromTileDistributedIndices(acc_dstr_idx);
+        auto acc = acc_tensor[acc_dstr_idx];
 
         // FIXME
         sweep_tile_span(spans[I1], [&](auto dstr_idx_i1) {
             constexpr auto in_dstr_idx = make_tuple(dstr_idx_i0, dstr_idx_i1);
 
-            const auto in = in_tensor.GetElementFromTileDistributedIndices(in_dstr_idx);
+            const auto in = in_tensor[in_dstr_idx];
 
             acc = reduce_func(acc, in);
         });
 
-        acc_tensor.SetElementFromTileDistributedIndices(acc_dstr_idx, acc);
+        acc_tensor(acc_dstr_idx) = acc;
     });
 #endif
 }
@@ -182,10 +182,10 @@ template <typename AccDataType_,
           index_t... InReduceDims,
           typename ReduceFunc,
           typename InDataType_>
-__host__ __device__ auto block_tile_reduce(const InDistributedTensor_& in_tensor,
-                                           Sequence<InReduceDims...> in_reduce_dims,
-                                           const ReduceFunc& reduce_func,
-                                           const InDataType_& reduce_init)
+__device__ auto block_tile_reduce(const InDistributedTensor_& in_tensor,
+                                  Sequence<InReduceDims...> in_reduce_dims,
+                                  const ReduceFunc& reduce_func,
+                                  const InDataType_& reduce_init)
 {
     using InDataType  = typename InDistributedTensor_::DataType;
     using AccDataType = remove_cvref_t<AccDataType_>;
@@ -208,25 +208,6 @@ __host__ __device__ auto block_tile_reduce(const InDistributedTensor_& in_tensor
     block_tile_reduce(acc_tensor, in_tensor, in_reduce_dims, reduce_func);
 
     return acc_tensor;
-}
-
-// FIXME: dummy host function for tile program
-template <typename AccDistributedTensor_,
-          typename InDistributedTensor_,
-          index_t... InReduceDims,
-          typename ReduceFunc>
-__host__ void block_tile_reduce(AccDistributedTensor_&,
-                                const InDistributedTensor_&,
-                                Sequence<InReduceDims...>,
-                                const ReduceFunc&)
-{
-}
-
-// FIXME: dummy host function for tile program
-template <typename AccDistributedTensor_, typename ReduceFunc>
-__host__ void block_tile_reduce_sync(AccDistributedTensor_&, const ReduceFunc&)
-
-{
 }
 
 } // namespace block

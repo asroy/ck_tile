@@ -8,7 +8,6 @@
 #include "ck/tensor_description/tensor_descriptor_helper.hpp"
 #include "ck/tensor_description/tensor_adaptor.hpp"
 
-#include "tile_program.hpp"
 #include "ck/tile_program/tile/tile_distribution.hpp"
 #include "ck/tile_program/tile/tile_elementwise.hpp"
 #include "ck/tile_program/tile/tile_gemm_shape.hpp"
@@ -18,12 +17,13 @@
 #include "ck/tile_program/block_tile_pipeline/block_gemm_pipeline_problem.hpp"
 #include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_v1.hpp"
 
-// C1 = A0 * B0 * B1
+// C0 = A0 * B0
+// C1 = C0 * B1
 template <typename A0DataType,
           typename B0DataType,
+          typename B1DataType,
           typename Acc0DataType,
           typename C0DataType,
-          typename B1DataType,
           typename Acc1DataType,
           typename C1DataType,
           ck::index_t kBlockSize,
@@ -64,7 +64,7 @@ struct GemmGemm
 
 #if 0
     // 2d
-    __host__ __device__ static constexpr auto MakeB1LdsBlockDescriptor()
+    __device__ static constexpr auto MakeB1LdsBlockDescriptor()
     {
         using namespace ck;
 
@@ -78,7 +78,7 @@ struct GemmGemm
     }
 #elif 1
     // fake XOR
-    __host__ __device__ static constexpr auto MakeB1LdsBlockDescriptor()
+    __device__ static constexpr auto MakeB1LdsBlockDescriptor()
     {
         using namespace ck;
 
@@ -171,7 +171,7 @@ struct GemmGemm
     }
 #endif
 
-    __host__ __device__ static constexpr auto MakeB1DramTileDistribution()
+    __device__ static constexpr auto MakeB1DramTileDistribution()
     {
         using namespace ck;
         using namespace ck::tile_program;
@@ -196,7 +196,7 @@ struct GemmGemm
                                            Sequence<0, 1>>{});
     }
 
-    __host__ __device__ static constexpr ck::index_t GetStaticLdsSize()
+    __device__ static constexpr ck::index_t GetStaticLdsSize()
     {
         using namespace ck;
 
@@ -205,19 +205,18 @@ struct GemmGemm
                                               sizeof(B1DataType)));
     }
 
-    __host__ __device__ void operator()(ProgramServer& ps,
-                                        const A0DataType* p_a0,
-                                        const B0DataType* p_b0,
-                                        const B1DataType* p_b1,
-                                        C1DataType* p_c1,
-                                        ck::index_t M0,
-                                        ck::index_t N0,
-                                        ck::index_t K0,
-                                        ck::index_t N1,
-                                        ck::index_t Lda0,
-                                        ck::index_t Ldb0,
-                                        ck::index_t Ldb1,
-                                        ck::index_t Ldc1)
+    __device__ void operator()(const A0DataType* p_a0,
+                               const B0DataType* p_b0,
+                               const B1DataType* p_b1,
+                               C1DataType* p_c1,
+                               ck::index_t M0,
+                               ck::index_t N0,
+                               ck::index_t K0,
+                               ck::index_t N1,
+                               ck::index_t Lda0,
+                               ck::index_t Ldb0,
+                               ck::index_t Ldb1,
+                               ck::index_t Ldc1)
     {
         using namespace ck;
         using namespace ck::tile_program;
@@ -234,17 +233,17 @@ struct GemmGemm
             p_b1, make_tuple(N1, N0), make_tuple(Ldb1, 1), Number<32>{}, Number<1>{});
 
         // divide problem
-        const auto id_block = ps.get_block_id();
+        const auto id_block = get_block_id();
 
         const auto num_tile_m0 = M0 / kM0PerBlock;
         const auto num_tile_n1 = N1 / kN1PerBlock;
 
-        const auto block2tile = ps(make_cluster_descriptor(make_tuple(num_tile_m0, num_tile_n1)));
+        const auto block2tile = make_cluster_descriptor(make_tuple(num_tile_m0, num_tile_n1));
 
         const auto id_tile = block2tile.CalculateBottomIndex(make_tuple(id_block));
 
-        const auto iM0 = ps.read_first_lane(id_tile.At<0>() * kM0PerBlock);
-        const auto iN1 = ps.read_first_lane(id_tile.At<1>() * kN1PerBlock);
+        const auto iM0 = __builtin_amdgcn_readfirstlane(id_tile.At<0>() * kM0PerBlock);
+        const auto iN1 = __builtin_amdgcn_readfirstlane(id_tile.At<1>() * kN1PerBlock);
 
         __shared__ char p_smem_char[GetStaticLdsSize()];
 
@@ -304,7 +303,7 @@ struct GemmGemm
             const auto b1_block_tile = load_tile(b1_dram_block_window);
             move_tile_window(b1_dram_block_window, {0, kK1PerBlock});
 
-            ps.block_sync_lds();
+            block_sync_lds();
 
             store_tile(b1_lds_block_window, b1_block_tile);
 
