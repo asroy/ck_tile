@@ -44,9 +44,12 @@ struct StaticTileDistributionEncoding
     __host__ __device__ static constexpr auto GetUniformedHDimLengths()
     {
         // <len_d0, len_d1, ...>
-        constexpr auto h_dim_lengths = to_sequence(
-            [&](auto inner) constexpr { return inner.Size(); }, HsLengthss{});
-        return h_dim_lengths;
+        return generate_sequence_v2(
+            [&](auto i) {
+                constexpr index_t size = HsLengthss{}[i].Size();
+                return Number<size>{};
+            },
+            Number<NDimX>{});
     }
 
     // e.g. tuple<seq<1, 4, 32>, seq<4, 1, 4, 2, 4>> --> seq<3, 5> --> seq<0, 3, 8>

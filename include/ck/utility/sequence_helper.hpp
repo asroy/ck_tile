@@ -14,7 +14,7 @@ __host__ __device__ constexpr auto make_sequence(Number<Is>...)
 }
 
 // F() returns index_t
-// F use default constructor
+// F use default constructor, so F cannot be lambda function
 template <typename F, index_t N>
 __host__ __device__ constexpr auto generate_sequence(F, Number<N>)
 {
@@ -22,6 +22,7 @@ __host__ __device__ constexpr auto generate_sequence(F, Number<N>)
 }
 
 // F() returns Number<>
+// F could be lambda function
 template <typename F, index_t N>
 __host__ __device__ constexpr auto generate_sequence_v2(F&& f, Number<N>)
 {
@@ -33,12 +34,6 @@ template <index_t... Is>
 __host__ __device__ constexpr auto to_sequence(Tuple<Number<Is>...>)
 {
     return Sequence<Is...>{};
-}
-
-template <typename F, typename... InnerType>
-__host__ __device__ constexpr auto to_sequence(F f, Tuple<InnerType...>)
-{
-    return Sequence<f(InnerType{})...>{};
 }
 
 } // namespace ck
