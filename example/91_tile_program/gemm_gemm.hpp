@@ -31,7 +31,7 @@ template <typename A0DataType,
           ck::index_t kN0PerBlock,
           ck::index_t kK0PerBlock,
           ck::index_t kN1PerBlock,
-          ck::index_t kK1PerBlock = kN0PerBlock>
+          ck::index_t kK1PerBlock>
 struct GemmGemm
 {
     static constexpr auto I0         = ck::Number<0>{};
@@ -76,8 +76,8 @@ struct GemmGemm
 
         return b_lds_block_desc;
     }
-#elif 0
-    // fake XOR
+#elif 1
+    // 3d, with padding
     __device__ static constexpr auto MakeB1LdsBlockDescriptor()
     {
         using namespace ck;
@@ -87,58 +87,25 @@ struct GemmGemm
         constexpr index_t kNPerBlock = kN1PerBlock;
         constexpr index_t kKPerBlock = kK1PerBlock;
         constexpr index_t kPad       = 1;
-        constexpr index_t k1         = 8;
+        constexpr index_t kK1        = 8;
 
         constexpr auto b_lds_block_desc_0 = make_naive_tensor_descriptor(
-            make_tuple(Number<kKPerBlock / k1>{}, Number<kNPerBlock>{}, Number<k1>{}),
-            make_tuple(Number<(kNPerBlock + kPad) * k1>{}, Number<k1>{}, Number<1>{}),
-            Number<k1>{},
+            make_tuple(Number<kKPerBlock / kK1>{}, Number<kNPerBlock>{}, Number<kK1>{}),
+            make_tuple(Number<(kNPerBlock + kPad) * kK1>{}, Number<kK1>{}, Number<1>{}),
+            Number<kK1>{},
             Number<1>{});
 
         constexpr auto b_lds_block_desc = transform_tensor_descriptor(
             b_lds_block_desc_0,
             make_tuple(make_pass_through_transform(kNPerBlock),
-                       // make_merge_transform_v3_division_mod(make_tuple(kKPerBlock / k1, k1))),
-                       make_merge_transform(make_tuple(Number<kKPerBlock / k1>{}, Number<k1>{}))),
+                       make_merge_transform(make_tuple(Number<kKPerBlock / kK1>{}, Number<kK1>{}))),
             make_tuple(Sequence<1>{}, Sequence<0, 2>{}),
             make_tuple(Sequence<0>{}, Sequence<1>{}));
 
         return b_lds_block_desc;
     }
-#elif 0
-    // 3d , no padding
-    __host__ __device__ static constexpr auto MakeB1LdsBlockDescriptor()
-    {
-        using namespace ck;
-
-        using BDataType = B1DataType;
-
-        constexpr index_t kNPerBlock = kN1PerBlock;
-        constexpr index_t kKPerBlock = kK1PerBlock;
-
-        constexpr auto b_lds_block_desc_d1_d2_d3 = make_naive_tensor_descriptor_packed(
-            make_tuple(kNPerBlock / 2, 2, kKPerBlock), Number<kKPerBlock>{});
-
-        constexpr index_t kK1 = 16 / sizeof(BDataType);
-
-        constexpr auto b_lds_block_desc_d4_d5_d6 = transform_tensor_descriptor(
-            b_lds_block_desc_d1_d2_d3,
-            make_tuple(make_xor_transform(make_tuple(kNPerBlock / 2, kKPerBlock), kK1),
-                       make_pass_through_transform(2)),
-            make_tuple(Sequence<0, 2>{}, Sequence<1>{}),
-            make_tuple(Sequence<0, 2>{}, Sequence<1>{}));
-
-        constexpr auto b_lds_block_desc_n_k = transform_tensor_descriptor(
-            b_lds_block_desc_d4_d5_d6,
-            make_tuple(make_merge_transform(make_tuple(kNPerBlock / 2, 2)),
-                       make_pass_through_transform(kKPerBlock)),
-            make_tuple(Sequence<0, 1>{}, Sequence<2>{}),
-            make_tuple(Sequence<0>{}, Sequence<1>{}));
-
-        return b_lds_block_desc_n_k;
-    }
 #else
-    // 3d , padding
+    // fake XOR
     __host__ __device__ static constexpr auto MakeB1LdsBlockDescriptor()
     {
         using namespace ck;
@@ -209,14 +176,14 @@ struct GemmGemm
                                const B0DataType* p_b0,
                                const B1DataType* p_b1,
                                C1DataType* p_c1,
-                               ck::index_t M0,
-                               ck::index_t N0,
-                               ck::index_t K0,
-                               ck::index_t N1,
-                               ck::index_t Lda0,
-                               ck::index_t Ldb0,
-                               ck::index_t Ldb1,
-                               ck::index_t Ldc1)
+                               const ck::index_t M0,
+                               const ck::index_t N0,
+                               const ck::index_t K0,
+                               const ck::index_t N1,
+                               const ck::index_t Lda0,
+                               const ck::index_t Ldb0,
+                               const ck::index_t Ldb1,
+                               const ck::index_t Ldc1)
     {
         using namespace ck;
         using namespace ck::tile_program;
