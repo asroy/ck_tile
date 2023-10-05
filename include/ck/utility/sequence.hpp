@@ -1127,35 +1127,6 @@ using sequence_merge_t = typename sequence_merge<Seqs...>::type;
 template <index_t NSize, index_t I>
 using uniform_sequence_gen_t = typename uniform_sequence_gen<NSize, I>::type;
 
-namespace detail {
-// [Begin, End]
-template <typename Seq, index_t Begin, index_t End, index_t Value>
-constexpr auto index_of_sorted_sequence_impl(Seq, Number<Begin>, Number<End>, Number<Value>)
-{
-    if constexpr(Begin > End)
-        return Number<-1>{};
-
-    constexpr auto Middle   = (Begin + End) / 2;
-    constexpr auto v_middle = Seq{}[Number<Middle>{}];
-    if constexpr(v_middle == Value)
-        return Number<Middle>{};
-    else if constexpr(v_middle < Value)
-        return index_of_sorted_sequence_impl(
-            Seq{}, Number<Middle + 1>{}, Number<End>{}, Number<Value>{});
-    else
-        return index_of_sorted_sequence_impl(
-            Seq{}, Number<Begin>{}, Number<Middle - 1>{}, Number<Value>{});
-}
-} // namespace detail
-
-// the sequence need to be sorted before pass in this function, from small to big
-// return -1 if not found, else return the index
-template <typename SortedSeq, index_t Value>
-constexpr auto index_of_sorted_sequence(SortedSeq, Number<Value>)
-{
-    return detail::index_of_sorted_sequence_impl(
-        SortedSeq{}, Number<0>{}, Number<SortedSeq::Size() - 1>{}, Number<Value>{});
-}
 
 // return the index of first occurance in the sequence, -1 if not found
 template <typename Seq, index_t Value>
