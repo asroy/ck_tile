@@ -877,47 +877,6 @@ __host__ __device__ constexpr auto inclusive_scan_sequence(Seq, Reduce, Number<I
     return reverse_inclusive_scan_sequence(Seq{}.Reverse(), Reduce{}, Number<Init>{}).Reverse();
 }
 
-// conditional reverse inclusive scan (with init) sequence, may stop at last N element
-template <typename, typename, typename, index_t>
-struct sequence_conditional_reverse_inclusive_scan;
-
-template <index_t I, index_t... Is, typename Reduce, typename Condition, index_t Init>
-struct sequence_conditional_reverse_inclusive_scan<Sequence<I, Is...>, Reduce, Condition, Init>
-{
-    using old_scan =
-        sequence_conditional_reverse_inclusive_scan<Sequence<Is...>, Reduce, Condition, Init>;
-    using old_scan_type = typename old_scan::type;
-
-    static constexpr bool cond =
-        Condition{}(I, old_scan_type{}.front()) && old_scan::cond; // chain old condition
-
-    using type =
-        typename conditional<cond,
-                             typename sequence_merge<Sequence<Reduce{}(I, old_scan_type{}.front())>,
-                                                     old_scan_type>::type,
-                             old_scan_type>::type;
-};
-
-template <index_t I, typename Reduce, typename Condition, index_t Init>
-struct sequence_conditional_reverse_inclusive_scan<Sequence<I>, Reduce, Condition, Init>
-{
-    static constexpr bool cond = Condition{}(I, Init);
-    using type = typename conditional<cond, Sequence<Reduce{}(I, Init)>, Sequence<>>::type;
-};
-
-template <typename Reduce, typename Condition, index_t Init>
-struct sequence_conditional_reverse_inclusive_scan<Sequence<>, Reduce, Condition, Init>
-{
-    static constexpr bool cond = false;
-    using type                 = Sequence<>;
-};
-
-template <typename Seq, typename Reduce, typename Condition, index_t Init>
-constexpr auto conditional_reverse_inclusive_scan_sequence(Seq, Reduce, Condition, Number<Init>)
-{
-    return
-        typename sequence_conditional_reverse_inclusive_scan<Seq, Reduce, Condition, Init>::type{};
-}
 
 // e.g. Seq<2, 3, 4> --> Seq<0, 2, 5>, Init=0, Reduce=Add
 //      ResultSeq  TargetSeq  Reduce
