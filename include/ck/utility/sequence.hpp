@@ -877,7 +877,6 @@ __host__ __device__ constexpr auto inclusive_scan_sequence(Seq, Reduce, Number<I
     return reverse_inclusive_scan_sequence(Seq{}.Reverse(), Reduce{}, Number<Init>{}).Reverse();
 }
 
-
 // e.g. Seq<2, 3, 4> --> Seq<0, 2, 5>, Init=0, Reduce=Add
 //      ResultSeq  TargetSeq  Reduce
 template <typename, typename, typename>
@@ -916,61 +915,6 @@ constexpr auto prefix_sum_sequence(Seq)
     return typename sequence_exclusive_scan<Sequence<0>,
                                             typename sequence_merge<Seq, Sequence<0>>::type,
                                             math::plus<index_t>>::type{};
-}
-
-namespace detail {
-template <index_t h_idx, typename SeqSortedSamples, typename SeqRange>
-struct sorted_sequence_histogram;
-
-template <index_t h_idx, index_t x, index_t... xs, index_t r, index_t... rs>
-struct sorted_sequence_histogram<h_idx, Sequence<x, xs...>, Sequence<r, rs...>>
-{
-    template <typename Histogram>
-    constexpr auto operator()(Histogram& h)
-    {
-        if constexpr(x < r)
-        {
-            h.template At<h_idx>() += 1;
-            sorted_sequence_histogram<h_idx, Sequence<xs...>, Sequence<r, rs...>>{}(h);
-        }
-        else
-        {
-            h.template At<h_idx + 1>() = 1;
-            sorted_sequence_histogram<h_idx + 1, Sequence<xs...>, Sequence<rs...>>{}(h);
-        }
-    }
-};
-
-template <index_t h_idx, index_t x, index_t r, index_t... rs>
-struct sorted_sequence_histogram<h_idx, Sequence<x>, Sequence<r, rs...>>
-{
-    template <typename Histogram>
-    constexpr auto operator()(Histogram& h)
-    {
-        if constexpr(x < r)
-        {
-            h.template At<h_idx>() += 1;
-        }
-    }
-};
-} // namespace detail
-
-// forward declare for histogram usage
-template <typename, index_t>
-struct Array;
-
-// SeqSortedSamples: <0, 2, 3, 5, 7>, SeqRange: <0, 3, 6, 9> -> SeqHistogram : <2, 2, 1>
-template <typename SeqSortedSamples, index_t r, index_t... rs>
-constexpr auto histogram_sorted_sequence(SeqSortedSamples, Sequence<r, rs...>)
-{
-    constexpr auto bins      = sizeof...(rs); // or categories
-    constexpr auto histogram = [&]() {
-        Array<index_t, bins> h{0}; // make sure this can clear all element to zero
-        detail::sorted_sequence_histogram<0, SeqSortedSamples, Sequence<rs...>>{}(h);
-        return h;
-    }();
-
-    return TO_SEQUENCE(histogram, bins);
 }
 
 template <typename Seq, index_t... Is>
@@ -1085,7 +1029,6 @@ using sequence_merge_t = typename sequence_merge<Seqs...>::type;
 
 template <index_t NSize, index_t I>
 using uniform_sequence_gen_t = typename uniform_sequence_gen<NSize, I>::type;
-
 
 // return the index of first occurance in the sequence, -1 if not found
 template <typename Seq, index_t Value>
