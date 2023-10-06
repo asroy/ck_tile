@@ -80,50 +80,45 @@ __host__ __device__ constexpr auto slice_distribution_from_x(
         // TODO: ugly
         auto new_h_lengths = transform_tuples(
             [&](auto h_len, auto id) {
-                {
-                    constexpr auto sliced_h =
-                        reverse_slice_sequence(h_len, Number<x_slice_lengths[id]>{});
+                constexpr auto sliced_h =
+                    reverse_slice_sequence(h_len, Number<x_slice_lengths[id]>{});
 
-                    constexpr auto sliced_h_lens  = sliced_h[Number<0>{}];
-                    constexpr auto sliced_h_index = sliced_h[Number<2>{}];
+                constexpr auto sliced_h_lens  = sliced_h[Number<0>{}];
+                constexpr auto sliced_h_index = sliced_h[Number<2>{}];
 
-                    // update y_slice_lengths
-                    constexpr auto uniformed_h_index =
-                        sliced_h_index + Number<src_h_prefix_sum[id]>{};
-                    constexpr auto found_y_index =
-                        index_of_sequence(src_y_dims, Number<uniformed_h_index>{});
-                    static_assert(found_y_index != -1, "not sliced at y dim, please check");
+                // update y_slice_lengths
+                constexpr auto uniformed_h_index = sliced_h_index + Number<src_h_prefix_sum[id]>{};
+                constexpr auto found_y_index =
+                    index_of_sequence(src_y_dims, Number<uniformed_h_index>{});
+                static_assert(found_y_index != -1, "not sliced at y dim, please check");
+                static_for<0, sliced_h_index + 1, 1>{}([&](auto i) {
+                    y_slice_lengths(src_y_maps[found_y_index - i]) =
+                        sliced_h_lens[sliced_h_index - i];
+                });
+                // TODO: add validations not across p dim
+
+                // NOTE: this y_origin is for all dims, not only current dim
+                //       will later use pick to select target dim
+                constexpr auto y_origin = [&]() {
+                    constexpr auto h_trans = make_merge_transform_v3_division_mod(h_len);
+                    // h_trans.low_lengths_scan_.foo();
+                    auto h_origin_ = make_zero_multi_index<h_trans.NDimLow>();
+                    h_trans.CalculateLowerIndex(h_origin_, Sequence<x_slice_begins[id].value>{});
+
+                    auto y_origin_ = make_zero_multi_index<Distribution::NDimY>();
                     static_for<0, sliced_h_index + 1, 1>{}([&](auto i) {
-                        y_slice_lengths(src_y_maps[found_y_index - i]) =
-                            sliced_h_lens[sliced_h_index - i];
+                        y_origin_(found_y_index - i) = h_origin_[sliced_h_index - i];
                     });
-                    // TODO: add validations not across p dim
+                    return y_origin_;
+                }();
 
-                    // NOTE: this y_origin is for all dims, not only current dim
-                    //       will later use pick to select target dim
-                    constexpr auto y_origin = [&]() {
-                        constexpr auto h_trans = make_merge_transform_v3_division_mod(h_len);
-                        // h_trans.low_lengths_scan_.foo();
-                        auto h_origin_ = make_zero_multi_index<h_trans.NDimLow>();
-                        h_trans.CalculateLowerIndex(h_origin_,
-                                                    Sequence<x_slice_begins[id].value>{});
+                constexpr auto y_picks = typename arithmetic_sequence_gen<src_y_prefix_sum[id],
+                                                                          src_y_prefix_sum[id + 1],
+                                                                          1>::type{};
 
-                        auto y_origin_ = make_zero_multi_index<Distribution::NDimY>();
-                        static_for<0, sliced_h_index + 1, 1>{}([&](auto i) {
-                            y_origin_(found_y_index - i) = h_origin_[sliced_h_index - i];
-                        });
-                        return y_origin_;
-                    }();
-
-                    constexpr auto y_picks =
-                        typename arithmetic_sequence_gen<src_y_prefix_sum[id],
-                                                         src_y_prefix_sum[id + 1],
-                                                         1>::type{};
-
-                    set_container_subset(
-                        y_slice_sorted_origins, y_picks, get_container_subset(y_origin, y_picks));
-                    return sliced_h_lens;
-                }
+                set_container_subset(
+                    y_slice_sorted_origins, y_picks, get_container_subset(y_origin, y_picks));
+                return sliced_h_lens;
             },
             typename Encoding::HsLengthss{},
             typename arithmetic_sequence_gen<0, Encoding::HsLengthss::Size(), 1>::type{});
