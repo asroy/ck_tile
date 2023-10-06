@@ -170,8 +170,8 @@ __host__ __device__ constexpr auto slice_distribution_from_x(
 
     constexpr auto x_slice_lengths = x_slice_ends - x_slice_begins;
 
-    constexpr auto src_h_prefix_sum = Encoding::GetHDimLengthsPrefixSum();
-    constexpr auto src_y_info       = Encoding::GetSortedYInfo();
+    constexpr auto src_h_prefix_sum = Encoding::Detail::GetHDimLengthsPrefixSum();
+    constexpr auto src_y_info       = Encoding::Detail::GetSortedYInfo();
     constexpr auto src_y_dims       = src_y_info[Number<0>{}];
     constexpr auto src_y_maps       = src_y_info[Number<1>{}];
     constexpr auto src_y_prefix_sum = src_y_info[Number<2>{}];
