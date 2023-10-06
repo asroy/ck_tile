@@ -101,8 +101,7 @@ __host__ __device__ constexpr auto slice_distribution_from_x(
                 //       will later use pick to select target dim
                 constexpr auto y_origin = [&]() {
                     constexpr auto h_trans = make_merge_transform_v3_division_mod(h_len);
-                    // h_trans.low_lengths_scan_.foo();
-                    auto h_origin_ = make_zero_multi_index<h_trans.NDimLow>();
+                    auto h_origin_         = make_zero_multi_index<h_trans.NDimLow>();
                     h_trans.CalculateLowerIndex(h_origin_, Sequence<x_slice_begins[id].value>{});
 
                     auto y_origin_ = make_zero_multi_index<Distribution::NDimY>();

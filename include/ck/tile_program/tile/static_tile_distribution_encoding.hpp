@@ -61,15 +61,6 @@ struct StaticTileDistributionEncoding
         return h_dim_prefix_sum;
     }
 
-    __host__ __device__ static constexpr auto GetUniformedYDimMask()
-    {
-        // h_dim  : tuple<seq<1, 4, 32>, seq<4, 1, 4, 2, 4>>
-        //                    Y  P  P        Y  P  Y  P  Y
-        // return : seq<1, 0, 0, 1, 0, 1, 0, 1>
-        constexpr auto all_ys_2_rhss = GetUniformedIdxY2H();
-        return mask_sequence_gen(all_ys_2_rhss, GetHDimLengthsPrefixSum().Back());
-    }
-
     //                    0  1  2        3  4  5  6  7
     // h_dim  : tuple<seq<1, 4, 32>, seq<4, 1, 4, 2, 4>>
     // p_major: tuple<seq<1, 2>, seq<2, 1>>
