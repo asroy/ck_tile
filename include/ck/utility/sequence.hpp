@@ -7,7 +7,6 @@
 #include "ck/utility/type.hpp"
 #include "ck/utility/functional.hpp"
 #include "ck/utility/math.hpp"
-#include "ck/utility/macro_func_array_to_sequence.hpp"
 
 namespace ck {
 

@@ -6,6 +6,7 @@
 #include "ck/utility/sequence.hpp"
 #include "ck/utility/array.hpp"
 #include "ck/utility/tuple.hpp"
+#include "ck/utility/macro_func_array_to_sequence.hpp"
 
 namespace ck {
 
