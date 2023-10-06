@@ -17,6 +17,113 @@ namespace ck {
 namespace tile_program {
 
 namespace detail {
+
+template <typename, typename, typename, index_t>
+struct reverse_slice_sequence_impl;
+
+template <index_t x,
+          index_t... xs,
+          index_t m,
+          index_t... ms,
+          index_t id,
+          index_t... ids,
+          index_t SliceSize>
+struct reverse_slice_sequence_impl<Sequence<x, xs...>,
+                                   Sequence<m, ms...>,
+                                   Sequence<id, ids...>,
+                                   SliceSize>
+{
+    using old_scan =
+        reverse_slice_sequence_impl<Sequence<xs...>, Sequence<ms...>, Sequence<ids...>, SliceSize>;
+
+    static constexpr auto slice_size = old_scan::remaining_slice_sizes::Front().value;
+    static constexpr auto slice_length =
+        std::conditional_t<m, Number<math::gcd(x, slice_size)>, Number<x>>::value;
+
+    using dim_lengths =
+        typename sequence_merge<Sequence<slice_length>, typename old_scan::dim_lengths>::type;
+    using dim_slices =
+        typename sequence_merge<Sequence<x / slice_length>, typename old_scan::dim_slices>::type;
+    using remaining_slice_sizes = typename sequence_merge<
+        std::conditional_t<m, Sequence<slice_size / slice_length>, Sequence<slice_size>>,
+        typename old_scan::remaining_slice_sizes>::type;
+
+    // the first idx that sliced length not equal to original length
+    static constexpr index_t _flag =
+        slice_length != x && remaining_slice_sizes{}.Front().value == 1;
+    static constexpr index_t _split_flag = std::conditional_t<m, Number<_flag>, Number<0>>::value;
+    static constexpr index_t _split_idx =
+        std::conditional_t<_split_flag, Number<id>, Number<0>>::value;
+
+    static constexpr index_t split_flag = _split_flag || old_scan::split_flag;
+    static constexpr index_t split_idx  = std::
+        conditional_t<old_scan::split_flag, Number<old_scan::split_idx>, Number<_split_idx>>::value;
+};
+
+template <index_t x, index_t m, index_t id, index_t SliceSize>
+struct reverse_slice_sequence_impl<Sequence<x>, Sequence<m>, Sequence<id>, SliceSize>
+{
+    static constexpr auto slice_size = SliceSize;
+    static constexpr auto slice_length =
+        std::conditional_t<m, Number<math::gcd(x, slice_size)>, Number<x>>::value;
+
+    using dim_lengths = Sequence<slice_length>;
+    using dim_slices  = Sequence<x / slice_length>;
+    using remaining_slice_sizes =
+        std::conditional_t<m, Sequence<slice_size / slice_length>, Sequence<slice_size>>;
+
+    // the first idx that sliced length not equal to original length
+    static constexpr index_t _flag =
+        slice_length != x && remaining_slice_sizes{}.Front().value == 1;
+    static constexpr index_t split_flag = std::conditional_t<m, Number<_flag>, Number<0>>::value;
+    static constexpr index_t split_idx =
+        std::conditional_t<split_flag, Number<id>, Number<0>>::value;
+};
+
+// clang-format off
+// input a sequence(with optional mask), and the SliceSize : size per slice
+// output the sequence each slice, and Number of slices
+//
+// e.g. <2, 1, 4, 2>, 8     -> lengths:<1, 1, 4, 2>    , nums: <2, 1, 1, 1>    : 2 slices  , slice_idx: 0
+//      <4, 2, 4, 1, 2>, 4  -> lengths:<1, 1, 2, 1, 2> , nums: <4, 2, 2, 1, 1> : 16 slices , slice_idx: 2
+//      <4, 2, 4, 1, 6>, 4  -> lengths:<1, 1, 2, 1, 2> , nums: <4, 2, 2, 1, 3> : 48 slices , slice_idx: 2
+//      <4, 2, 5, 1, 2>, 10 -> lengths:<1, 1, 5, 1, 2> , nums: <4, 2, 1, 1, 1> : 8 slices  , slice_idx: 1
+//
+//      <4, 2, 8>, 64       -> lengths:<4, 2, 8>       , nums: <1, 1, 1>       : 1  slices , slice_idx: 0
+//      <4, 2, 8>, 32       -> lengths:<2, 2, 8>       , nums: <2, 1, 1>       : 2  slices , slice_idx: 0
+//      <4, 2, 8>, 16       -> lengths:<1, 2, 8>       , nums: <4, 1, 1>       : 4  slices , slice_idx: 0
+//      <4, 2, 8>, 8        -> lengths:<1, 1, 8>       , nums: <4, 2, 1>       : 8  slices , slice_idx: 1
+//      <4, 2, 8>, 4        -> lengths:<1, 1, 4>       , nums: <4, 2, 2>       : 16 slices , slice_idx: 2
+//      <4, 2, 8>, 2        -> lengths:<1, 1, 2>       , nums: <4, 2, 4>       : 32 slices , slice_idx: 2
+//      <4, 2, 8>, 1        -> lengths:<1, 1, 1>       , nums: <4, 2, 8>       : 64 slices , slice_idx: 2
+//
+//      <4, 2, 1, 4, 2> / 4 ->
+// mask:<1, 1, 1, 0, 1>,    -> lengths:<1, 2, 1, 4, 2> , nums: <4, 1, 1, 1, 1> : 8 slices  , slice_idx: 0
+//
+// return Tuple<slice_lengths, slice_nums, slice_index>, slice_index is at which index will start
+// have split slices (right -> left)
+//  or the first index that sliced length is different from the original length
+// clang-format on
+template <typename Seq,
+          index_t SliceSize,
+          typename Mask = typename uniform_sequence_gen<Seq::Size(), 1>::type>
+constexpr auto reverse_slice_sequence(Seq,
+                                      Number<SliceSize>,
+                                      Mask = typename uniform_sequence_gen<Seq::Size(), 1>::type{})
+{
+    static_assert(Seq::Size() == Mask::Size());
+    using sliced_type =
+        reverse_slice_sequence_impl<Seq,
+                                    Mask,
+                                    typename arithmetic_sequence_gen<0, Seq::Size(), 1>::type,
+                                    SliceSize>;
+    static_assert(sliced_type::remaining_slice_sizes::Front().value == 1,
+                  "can not evenly divide this sequence, please check");
+    return make_tuple(typename sliced_type::dim_lengths{},
+                      typename sliced_type::dim_slices{},
+                      Number<sliced_type::split_idx>{});
+}
+
 //
 // slice tensor from x_dim, result in split in y_dim, not p_dim.
 // We don't support slice cross p_dim (aka, slice different threads)
