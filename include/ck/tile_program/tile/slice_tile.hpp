@@ -88,9 +88,11 @@ __host__ __device__ constexpr auto slice_distribution_from_x(
 
                 // update y_slice_lengths
                 constexpr auto uniformed_h_index = sliced_h_index + Number<src_h_prefix_sum[id]>{};
-                constexpr auto found_y_index =
-                    index_of_sequence(src_y_dims, Number<uniformed_h_index>{});
-                static_assert(found_y_index != -1, "not sliced at y dim, please check");
+                constexpr auto found_y_index     = container_find(src_y_dims, uniformed_h_index);
+
+                static_assert(found_y_index >= 0 && found_y_index < src_y_dims.Size(),
+                              "not sliced at y dim, please check");
+
                 static_for<0, sliced_h_index + 1, 1>{}([&](auto i) {
                     y_slice_lengths(src_y_maps[found_y_index - i]) =
                         sliced_h_lens[sliced_h_index - i];

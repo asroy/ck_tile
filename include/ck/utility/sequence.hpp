@@ -957,21 +957,6 @@ using sequence_merge_t = typename sequence_merge<Seqs...>::type;
 template <index_t NSize, index_t I>
 using uniform_sequence_gen_t = typename uniform_sequence_gen<NSize, I>::type;
 
-// return the index of first occurance in the sequence, -1 if not found
-template <typename Seq, index_t Value>
-constexpr auto index_of_sequence(Seq, Number<Value>)
-{
-    constexpr index_t idx = [&]() {
-        for(auto i = 0; i < Seq::Size(); i++)
-        {
-            if(Seq{}[i] == Value)
-                return i;
-        }
-        return -1;
-    }();
-    return Number<idx>{};
-}
-
 namespace detail {
 template <typename, typename, typename, index_t>
 struct reverse_slice_sequence_impl;
