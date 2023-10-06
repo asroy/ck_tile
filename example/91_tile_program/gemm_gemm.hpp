@@ -247,8 +247,8 @@ struct GemmGemm
                 tile_elementwise_in(
                     type_convert<C0DataType, Acc0DataType>,
                     block_gemm0_pipeline(a0_dram_block_window, b0_dram_block_window, 0, nullptr)),
-                si{},
-                si{I0, K1PerBlock}),
+                Sequence<0, 0>{},
+                Sequence<kM0PerBlock, kK1PerBlock>{}),
             b1_dram_block_window)){};
 
         // init Acc1
@@ -283,7 +283,9 @@ struct GemmGemm
                     const auto b1_block_tile_1 = load_tile(b1_dram_block_window);
                     block_sync_lds();
                     block_gemm1(acc1_block_tile,
-                                get_slice_tile(c0_block_tile, si{}, si{i * K1PerBlock, K1PerBlock}),
+                                get_slice_tile(c0_block_tile,
+                                               Sequence<0, i * kK1PerBlock>{},
+                                               Sequence<kM0PerBlock, (i + 1) * kK1PerBlock>{}),
                                 b1_lds_block_window);
                     block_sync_lds();
                     move_tile_window(b1_dram_block_window, {0, kK1PerBlock});
@@ -295,8 +297,8 @@ struct GemmGemm
                 block_sync_lds();
                 block_gemm1(acc1_block_tile,
                             get_slice_tile(c0_block_tile,
-                                           si{},
-                                           si{Number<k1_loops - 1>{} * K1PerBlock, K1PerBlock}),
+                                           Sequence<0, (k1_loops - 1) * kK1PerBlock>{},
+                                           Sequence<kM0PerBlock, kN0PerBlock>{}),
                             b1_lds_block_window);
             }
 

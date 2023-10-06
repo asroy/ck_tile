@@ -15,6 +15,8 @@
 
 namespace ck {
 namespace tile_program {
+
+namespace detail {
 //
 // slice tensor from x_dim, result in split in y_dim, not p_dim.
 // We don't support slice cross p_dim (aka, slice different threads)
@@ -49,25 +51,23 @@ namespace tile_program {
 //                           subdime
 //                                the P dim in the left is 1, means actually not crossing P
 //
-template <typename Distribution, index_t... XSliceOrigins, index_t... XSliceLengths>
-__host__ __device__ constexpr auto
-    slice_distribution_from_x(Distribution, Sequence<XSliceOrigins...>, Sequence<XSliceLengths...>)
+template <typename Distribution, index_t... XSliceBegins, index_t... XSliceEnds>
+__host__ __device__ constexpr auto slice_distribution_from_x(
+    Distribution, Sequence<XSliceBegins...> x_slice_begins, Sequence<XSliceEnds...> x_slice_ends)
 {
     // NOTE: this function need to be called under constexpr context,
     // due to https://wg21.link/p2280r0 we have to use non-reference type for distribution
     using Encoding = decltype(Distribution::GetStaticTileDistributionEncoding());
 
-    static_assert(sizeof...(XSliceOrigins) == sizeof...(XSliceLengths));
-    constexpr auto all_length = Number<0>{};
+    static_assert(sizeof...(XSliceBegins) == sizeof...(XSliceEnds));
+
+    constexpr auto x_slice_lengths = x_slice_ends - x_slice_begins;
 
     constexpr auto src_h_prefix_sum = Encoding::GetHDimLengthsPrefixSum();
     constexpr auto src_y_info       = Encoding::GetSortedYInfo();
     constexpr auto src_y_dims       = src_y_info[Number<0>{}];
     constexpr auto src_y_maps       = src_y_info[Number<1>{}];
     constexpr auto src_y_prefix_sum = src_y_info[Number<2>{}];
-
-    constexpr auto x_slice_origins = Sequence<XSliceOrigins...>{};
-    constexpr auto x_slice_lengths = Sequence<XSliceLengths...>{};
 
     constexpr auto sliced_hlen_yidx_ylen = [&]() constexpr
     {
@@ -80,12 +80,6 @@ __host__ __device__ constexpr auto
         // TODO: ugly
         auto new_h_lengths = transform_tuples(
             [&](auto h_len, auto id) {
-                if constexpr(x_slice_lengths[id] == all_length)
-                {
-                    // here seems must use constexpr, otherwise else... will evaluate.
-                    return h_len;
-                }
-                else
                 {
                     constexpr auto sliced_h =
                         reverse_slice_sequence(h_len, Number<x_slice_lengths[id]>{});
@@ -112,7 +106,7 @@ __host__ __device__ constexpr auto
                         // h_trans.low_lengths_scan_.foo();
                         auto h_origin_ = make_zero_multi_index<h_trans.NDimLow>();
                         h_trans.CalculateLowerIndex(h_origin_,
-                                                    Sequence<x_slice_origins[id].value>{});
+                                                    Sequence<x_slice_begins[id].value>{});
 
                         auto y_origin_ = make_zero_multi_index<Distribution::NDimY>();
                         static_for<0, sliced_h_index + 1, 1>{}([&](auto i) {
@@ -142,19 +136,19 @@ __host__ __device__ constexpr auto
     return sliced_hlen_yidx_ylen;
 }
 
-template <typename StaticDistributedTensor_, typename... SIs>
-__host__ __device__ constexpr auto get_slice_tile(const StaticDistributedTensor_& tile, SIs...)
+} // namespace detail
+
+template <typename StaticDistributedTensor_, index_t... SliceBegins, index_t... SliceEnds>
+__host__ __device__ constexpr auto get_slice_tile(const StaticDistributedTensor_& tile,
+                                                  Sequence<SliceBegins...> slice_begins,
+                                                  Sequence<SliceEnds...> slice_ends)
 {
     using Distribution = decltype(StaticDistributedTensor_::GetTileDistribution());
     using Encoding     = decltype(Distribution::GetStaticTileDistributionEncoding());
     using DataType     = typename StaticDistributedTensor_::DataType;
 
-    static_assert(sizeof...(SIs) == Distribution::NDimX);
-    constexpr auto origins_lengths =
-        zip_tuples([&](auto... ts) { return make_sequence(ts...); }, make_tuple(SIs{}...));
-
-    constexpr auto sliced_hlen_yidx_ylen = slice_distribution_from_x(
-        Distribution{}, origins_lengths[Number<0>{}], origins_lengths[Number<1>{}]);
+    constexpr auto sliced_hlen_yidx_ylen =
+        detail::slice_distribution_from_x(Distribution{}, slice_begins, slice_ends);
 
     constexpr auto sliced_h_lengths       = sliced_hlen_yidx_ylen[Number<0>{}];
     constexpr auto sliced_y_origins_array = sliced_hlen_yidx_ylen[Number<1>{}];
@@ -182,18 +176,19 @@ __host__ __device__ constexpr auto get_slice_tile(const StaticDistributedTensor_
     return sliced_tensor;
 }
 
-template <typename StaticDistributedTensor_, typename StaticBuffer_, typename... SIs>
-__host__ __device__ constexpr auto
-set_slice_tile(StaticDistributedTensor_& tile, const StaticBuffer_& sliced_thread_data, SIs...)
+template <typename DstStaticDistributedTensor_,
+          typename SrcStaticDistributedTensor_,
+          index_t... SliceBegins,
+          index_t... SliceEnds>
+__host__ __device__ constexpr auto set_slice_tile(DstStaticDistributedTensor_& dst_tile,
+                                                  const SrcStaticDistributedTensor_& src_tile,
+                                                  Sequence<SliceBegins...> slice_begins,
+                                                  Sequence<SliceEnds...> slice_ends)
 {
-    using Distribution = decltype(StaticDistributedTensor_::GetTileDistribution());
+    using DstDistribution = decltype(DstStaticDistributedTensor_::GetTileDistribution());
 
-    static_assert(sizeof...(SIs) == Distribution::NDimX);
-    constexpr auto origins_lengths =
-        zip_tuples([&](auto... ts) { return make_sequence(ts...); }, make_tuple(SIs{}...));
-
-    constexpr auto sliced_hlen_yidx_ylen = slice_distribution_from_x(
-        Distribution{}, origins_lengths[Number<0>{}], origins_lengths[Number<1>{}]);
+    constexpr auto sliced_hlen_yidx_ylen =
+        detail::slice_distribution_from_x(DstDistribution{}, slice_begins, slice_ends);
 
     constexpr auto sliced_h_lengths       = sliced_hlen_yidx_ylen[Number<0>{}];
     constexpr auto sliced_y_origins_array = sliced_hlen_yidx_ylen[Number<1>{}];
@@ -204,7 +199,7 @@ set_slice_tile(StaticDistributedTensor_& tile, const StaticBuffer_& sliced_threa
     constexpr auto sliced_y_origins = TO_SEQUENCE(sliced_y_origins_array, sliced_y_origins_size);
     constexpr auto sliced_y_lengths = TO_SEQUENCE(sliced_y_lengths_array, sliced_y_lengths_size);
 
-    tile.SetSlicedThreadData(sliced_y_origins, sliced_y_lengths, sliced_thread_data);
+    dst_tile.SetSlicedThreadData(sliced_y_origins, sliced_y_lengths, src_tile.GetThreadBuffer());
 }
 
 } // namespace tile_program
