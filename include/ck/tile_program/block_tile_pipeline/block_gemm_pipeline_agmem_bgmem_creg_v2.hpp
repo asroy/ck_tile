@@ -133,29 +133,25 @@ struct BlockGemmPipelineAGmemBGmemCRegV2
 
         // prefetch
         // global read 0
+        auto a_block_tile_prefetch = load_tile(a_copy_dram_window);
+        auto b_block_tile_prefetch = load_tile(b_copy_dram_window);
+
+        // move to 1
+        move_tile_window(a_copy_dram_window, {0, kKPerBlock});
+        move_tile_window(b_copy_dram_window, {0, kKPerBlock});
+
+        // global read 1
         auto a_block_tile = load_tile(a_copy_dram_window);
         auto b_block_tile = load_tile(b_copy_dram_window);
 
-        {
-            // move to 1
-            move_tile_window(a_copy_dram_window, {0, kKPerBlock});
-            move_tile_window(b_copy_dram_window, {0, kKPerBlock});
+        // Initialize C
+        tile_elementwise_inout([](auto& c) { c = 0; }, c_block_tile);
 
-            // Initialize C
-            tile_elementwise_inout([](auto& c) { c = 0; }, c_block_tile);
+        block_sync_lds(); // make sure barrier before entring pipeline
 
-            // LDS write 0
-            const auto a_block_tile_tmp = tile_elementwise_in(a_element_func, a_block_tile);
-            store_tile(a_copy_lds_window, a_block_tile_tmp);
-            // global read 1
-            a_block_tile = load_tile(a_copy_dram_window);
-
-            // LDS write 0
-            const auto b_block_tile_tmp = tile_elementwise_in(b_element_func, b_block_tile);
-            store_tile(b_copy_lds_window, b_block_tile_tmp);
-            // global read 1
-            b_block_tile = load_tile(b_copy_dram_window);
-        }
+        store_tile(a_copy_lds_window, tile_elementwise_in(a_element_func, a_block_tile_prefetch));
+        // LDS write 0
+        store_tile(b_copy_lds_window, tile_elementwise_in(b_element_func, b_block_tile_prefetch));
 
         index_t iCounter = num_loop - 2;
 

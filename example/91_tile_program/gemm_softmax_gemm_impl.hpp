@@ -364,8 +364,8 @@ struct GemmSoftmaxGemmImpl
             }
             // move tile windows
             move_tile_window(k_dram_window, {kN0PerBlock, 0});
-            __builtin_amdgcn_sched_barrier(0);    // force this sched barrier to the end
-            block_sync_lds();
+            // __builtin_amdgcn_sched_barrier(0);    // force this sched barrier to the end
+            // block_sync_lds();
 
             iN0 += kN0PerBlock;
 
