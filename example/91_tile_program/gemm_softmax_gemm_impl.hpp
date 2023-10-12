@@ -361,10 +361,11 @@ struct GemmSoftmaxGemmImpl
                                      Sequence<0, (k1_loops - 1) * kK1PerBlock>{},
                                      Sequence<kM0PerBlock, kN0PerBlock>{}),
                       v_lds_window);
-                block_sync_lds();
             }
             // move tile windows
             move_tile_window(k_dram_window, {kN0PerBlock, 0});
+            __builtin_amdgcn_sched_barrier(0);    // force this sched barrier to the end
+            block_sync_lds();
 
             iN0 += kN0PerBlock;
 
