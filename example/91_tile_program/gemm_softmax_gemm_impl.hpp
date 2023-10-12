@@ -304,6 +304,12 @@ struct GemmSoftmaxGemmImpl
                 });
             });
 
+            __builtin_amdgcn_sched_barrier(0);
+
+            block_sync_lds();
+            store_tile(v_lds_window, v_prefetch);
+            move_tile_window(v_dram_window, {0, kK1PerBlock});
+
             // rowsum(Pcompute{j})
             auto rowsum_p = block_tile_reduce<SMPLComputeDataType>(
                 p_compute, Sequence<1>{}, f_sum, SMPLComputeDataType{0});
@@ -327,10 +333,6 @@ struct GemmSoftmaxGemmImpl
                     o_acc(i_j_idx) *= tmp;
                 });
             });
-
-            block_sync_lds();
-            store_tile(v_lds_window, v_prefetch);
-            move_tile_window(v_dram_window, {0, kK1PerBlock});
 
             // type cast Pcompute{j} into P{j}
             const auto p =
