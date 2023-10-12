@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
     using ODataType           = ck::half_t;
 
     ck::index_t Batch = 16;
-    ck::index_t M0    = 4096;
+    ck::index_t M0    = 3328;
     ck::index_t N0    = 4096;
     ck::index_t K0    = 128;
     ck::index_t N1    = 128;
@@ -101,6 +101,7 @@ int main(int argc, char* argv[])
     constexpr ck::index_t kN0PerBlock = 128;
     constexpr ck::index_t kK0PerBlock = 32;
     constexpr ck::index_t kN1PerBlock = 128;
+    constexpr ck::index_t kK1PerBlock = 32;
 
     constexpr ck::index_t kBlockSize = 256;
     ck::index_t kGridSize            = Batch * (M0 / kM0PerBlock) * (N1 / kN1PerBlock);
@@ -125,7 +126,8 @@ int main(int argc, char* argv[])
                                                                       kM0PerBlock,
                                                                       kN0PerBlock,
                                                                       kK0PerBlock,
-                                                                      kN1PerBlock>{},
+                                                                      kN1PerBlock,
+                                                                      kK1PerBlock>{},
                                                kGridSize,
                                                kBlockSize,
                                                0,
