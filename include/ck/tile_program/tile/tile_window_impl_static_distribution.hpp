@@ -136,14 +136,16 @@ struct TileWindowWithStaticDistribution
       // only support warp-tile and block-tile
         static_assert(NDimP == 1 or NDimP == 2, "wrong!");
 
+        WindowAdaptorCoord window_adaptor_thread_coord_tmp;
+
         if constexpr(NDimP == 1)
         {
-            window_adaptor_thread_coord_ = make_tensor_adaptor_coordinate(
+            window_adaptor_thread_coord_tmp = make_tensor_adaptor_coordinate(
                 tile_distribution.GetPsYs2XsAdaptor(), AdaptorTopIndex{get_lane_id(), 0});
         }
         else if constexpr(NDimP == 2)
         {
-            window_adaptor_thread_coord_ =
+            window_adaptor_thread_coord_tmp =
                 make_tensor_adaptor_coordinate(tile_distribution.GetPsYs2XsAdaptor(),
                                                AdaptorTopIndex{get_warp_id(), get_lane_id(), 0});
         }
@@ -151,15 +153,17 @@ struct TileWindowWithStaticDistribution
         // only support warp-tile and block-tile
         static_assert(NDimP == 1 or NDimP == 2, "wrong!");
 
+        WindowAdaptorCoord window_adaptor_thread_coord_tmp;
+
         if constexpr(NDimP == 1)
         {
-            window_adaptor_thread_coord_ = make_tensor_adaptor_coordinate(
+            window_adaptor_thread_coord_tmp = make_tensor_adaptor_coordinate(
                 tile_distribution.GetPsYs2XsAdaptor(),
                 container_concat(Array<index_t, 1>{get_lane_id()}, Array<index_t, NDimY>{0}));
         }
         else if constexpr(NDimP == 2)
         {
-            window_adaptor_thread_coord_ = make_tensor_adaptor_coordinate(
+            window_adaptor_thread_coord_tmp = make_tensor_adaptor_coordinate(
                 tile_distribution.GetPsYs2XsAdaptor(),
                 container_concat(Array<index_t, 2>{get_warp_id(), get_lane_id()},
                                  Array<index_t, NDimY>{0}));
