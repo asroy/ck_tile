@@ -48,96 +48,12 @@ struct TileWindowWithStaticDistribution
     using BottomTensorCoord =
         decltype(make_tensor_coordinate(BottomTensorDesc{}, BottomTensorIndex{}));
 
-    struct TraitsBase
+    struct LoadStoreTraits
     {
-        protected:
         static constexpr index_t NDimP = TileDstr::GetNumOfDimensionP();
         static constexpr index_t NDimY = TileDstr::GetNumOfDimensionY();
 
         using DataType = remove_cvref_t<typename BottomTensorView_::DataType>;
-
-        template <index_t ScalarPerVector>
-        using vector_type_t = vector_type_maker_t<DataType, ScalarPerVector>;
-
-        template <index_t VectorDimY, index_t ScalarPerVector>
-        static constexpr auto GetScalarsPerAccess()
-        {
-            constexpr auto scalars_per_access_arr = generate_array(
-                [&](auto i) { return (i == VectorDimY) ? ScalarPerVector : 1; }, Number<NDimY>{});
-
-            /// TODO: add non-automatic storage argument support to macro TO_SEQUENCE()
-            constexpr auto NDimY_ = NDimY;
-
-            return TO_SEQUENCE(scalars_per_access_arr, NDimY_);
-        }
-
-        template <typename TensorLengths, index_t VectorDimY, index_t ScalarPerVector>
-        using SpaceFillingCurve =
-            ck::SpaceFillingCurve<TensorLengths,
-                                  typename arithmetic_sequence_gen<0, NDimY, 1>::type,
-                                  decltype(GetScalarsPerAccess<VectorDimY, ScalarPerVector>())>;
-    };
-
-    template <typename YIndex, index_t... YSliceLengths>
-    struct LoadTraits : TraitsBase
-    {
-        using TraitsBase::NDimP;
-        using TraitsBase::NDimY;
-
-        static_assert(NDimY == YIndex::Size() && NDimY == sizeof...(YSliceLengths),
-                      "wrong! inconsistent # of dimension");
-
-        using typename TraitsBase::DataType;
-
-        using ThreadBuffer =
-            StaticBuffer<AddressSpaceEnum::Vgpr,
-                         DataType,
-                         container_reduce(Sequence<YSliceLengths...>{}, math::multiplies{}, 1),
-                         true>;
-
-        private:
-        static constexpr auto GetVectorDimYScalarPerVector()
-        {
-            auto [ys_vector_lengths, ys_vector_strides] =
-                TileWindowWithStaticDistribution::GetWindowAdaptorYsSafeVectorLengthStrides();
-
-            index_t VectorDimY_      = 0;
-            index_t ScalarPerVector_ = 1;
-
-            for(index_t i = 0; i < NDimY; ++i)
-            {
-                if(ys_vector_strides[i] == 1 && ys_vector_lengths[i] > ScalarPerVector_)
-                {
-                    ScalarPerVector_ =
-                        math::gcd(ys_vector_lengths[i], Sequence<YSliceLengths...>{}[i]);
-                    VectorDimY_ = i;
-                }
-            }
-
-            return make_tuple(VectorDimY_, ScalarPerVector_);
-        }
-
-        public:
-        static constexpr index_t VectorDimY      = GetVectorDimYScalarPerVector().template At<0>();
-        static constexpr index_t ScalarPerVector = GetVectorDimYScalarPerVector().template At<1>();
-
-        using vector_type_t = typename TraitsBase::template vector_type_t<ScalarPerVector>;
-        using vector_t      = typename vector_type_t::type;
-
-        using SpaceFillingCurve = typename TraitsBase::
-            template SpaceFillingCurve<Sequence<YSliceLengths...>, VectorDimY, ScalarPerVector>;
-
-        static constexpr index_t NumAccess = SpaceFillingCurve::GetNumOfAccess();
-
-        static_assert(0 < NumAccess, "Wrong! NumAccess should be larger than 0");
-    };
-
-    struct StoreTraits : TraitsBase
-    {
-        using TraitsBase::NDimP;
-        using TraitsBase::NDimY;
-
-        using typename TraitsBase::DataType;
 
         private:
         static constexpr auto GetVectorDimYScalarPerVector()
@@ -164,8 +80,19 @@ struct TileWindowWithStaticDistribution
         static constexpr index_t VectorDimY      = GetVectorDimYScalarPerVector().template At<0>();
         static constexpr index_t ScalarPerVector = GetVectorDimYScalarPerVector().template At<1>();
 
-        using vector_type_t = typename TraitsBase::template vector_type_t<ScalarPerVector>;
+        using vector_type_t = vector_type_maker_t<DataType, ScalarPerVector>;
         using vector_t      = typename vector_type_t::type;
+
+        static constexpr auto GetScalarsPerAccess()
+        {
+            constexpr auto scalars_per_access_arr = generate_array(
+                [&](auto i) { return (i == VectorDimY) ? ScalarPerVector : 1; }, Number<NDimY>{});
+
+            /// TODO: add non-automatic storage argument support to macro TO_SEQUENCE()
+            constexpr auto NDimY_ = NDimY;
+
+            return TO_SEQUENCE(scalars_per_access_arr, NDimY_);
+        }
 
         private:
         static constexpr auto GetSpaceFillingCurve()
@@ -175,25 +102,24 @@ struct TileWindowWithStaticDistribution
             constexpr auto thread_tensor_lengths_ys =
                 to_sequence(tile_dstr.GetYs2DDescriptor().GetLengths());
 
-            return
-                typename TraitsBase::template SpaceFillingCurve<decltype(thread_tensor_lengths_ys),
-                                                                VectorDimY,
-                                                                ScalarPerVector>{};
+            return SpaceFillingCurve<decltype(thread_tensor_lengths_ys),
+                                     typename arithmetic_sequence_gen<0, NDimY, 1>::type,
+                                     decltype(GetScalarsPerAccess())>{};
         }
 
         public:
-        using SpaceFillingCurve = decltype(GetSpaceFillingCurve());
+        using SFC_Ys = decltype(GetSpaceFillingCurve());
 
-        static constexpr index_t NumAccess = SpaceFillingCurve::GetNumOfAccess();
+        static constexpr index_t NumAccess = SFC_Ys::GetNumOfAccess();
 
         static_assert(0 < NumAccess, "Wrong! NumAccess should be larger than 0");
     };
 
     static constexpr index_t NumCoords =
-        (0 < HintNumCoords_ ? math::min(StoreTraits::NumAccess, HintNumCoords_)
-                            : StoreTraits::NumAccess);
+        (0 < HintNumCoords_ ? math::min(LoadStoreTraits::NumAccess, HintNumCoords_)
+                            : LoadStoreTraits::NumAccess);
 
-    static constexpr index_t NumAccessPerCoord = StoreTraits::NumAccess / NumCoords;
+    static constexpr index_t NumAccessPerCoord = LoadStoreTraits::NumAccess / NumCoords;
 
     __device__ constexpr TileWindowWithStaticDistribution() = default;
 
@@ -263,12 +189,12 @@ struct TileWindowWithStaticDistribution
         // pre-compute NumCoords (WindowAdaptorCoord, BottomTensorCoord) bundles to speed up
         // future Store() calls (might allocate more registers)
         {
-            using Traits = StoreTraits;
+            using Traits = LoadStoreTraits;
 
             static_assert(Traits::NumAccess % NumCoords == 0,
                           "# of access is not divisible by HintNumCoords_");
 
-            using SFC_Ys = typename Traits::SpaceFillingCurve;
+            using SFC_Ys = typename Traits::SFC_Ys;
 
             auto window_adaptor_thread_coord = window_adaptor_thread_coord_;
             auto bottom_tensor_thread_coord  = bottom_tensor_thread_coord_;
@@ -405,12 +331,12 @@ struct TileWindowWithStaticDistribution
         static_assert(is_same_v<DataType_, DataType>,
                       "Unmatched DataType of tile window & distributed tensor");
 
-        using Traits = StoreTraits;
+        using Traits = LoadStoreTraits;
 
         using vector_type_t = typename Traits::vector_type_t;
         using vector_t      = typename vector_type_t::type;
 
-        using SFC_Ys = typename Traits::SpaceFillingCurve;
+        using SFC_Ys = typename Traits::SFC_Ys;
 
         constexpr auto tile_dstr = TileDstr{};
 
