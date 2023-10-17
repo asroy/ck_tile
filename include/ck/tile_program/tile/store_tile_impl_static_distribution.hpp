@@ -17,12 +17,12 @@ namespace tile_program {
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
-          index_t HintNumCoords_,
+          index_t NumCoord,
           typename DataType_>
 __device__ void store_tile(TileWindowWithStaticDistribution<BottomTensorView_,
                                                             WindowLengths_,
                                                             TileDistribution_,
-                                                            HintNumCoords_>& tile_window,
+                                                            NumCoord>& tile_window,
                            const StaticDistributedTensor<DataType_, TileDistribution_>& dstr_tensor)
 {
     tile_window.Store(dstr_tensor);

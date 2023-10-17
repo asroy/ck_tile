@@ -19,11 +19,11 @@ namespace tile_program {
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
-          index_t HintNumCoords_>
+          index_t NumCoord>
 __device__ auto load_tile(TileWindowWithStaticDistribution<BottomTensorView_,
                                                            WindowLengths_,
                                                            TileDistribution_,
-                                                           HintNumCoords_>& tile_window)
+                                                           NumCoord>& tile_window)
 {
     return tile_window.Load();
 }
