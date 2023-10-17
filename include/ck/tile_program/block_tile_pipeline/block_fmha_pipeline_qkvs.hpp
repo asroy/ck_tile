@@ -139,26 +139,27 @@ struct BlockFmhaPipelineQKVS
                              v_dram_block_window_tmp.GetWindowOrigin(),
                              Policy::template MakeVDramTileDistribution<Problem>());
 
+        // STAGE 1, QK gemm
+        auto q_dram_window = make_tile_window(
+            q_dram_block_window_tmp.GetBottomTensorView(),
+            q_dram_block_window_tmp.GetWindowLengths(),
+            q_dram_block_window_tmp.GetWindowOrigin(),
+            Policy::template MakeQDramTileDistribution<Problem>()); // Q DRAM tile window for
+                                                                    // load
+
+        auto k_dram_window = make_tile_window(
+            k_dram_block_window.GetBottomTensorView(),
+            k_dram_block_window.GetWindowLengths(),
+            k_dram_block_window.GetWindowOrigin(),
+            Policy::template MakeKDramTileDistribution<Problem>()); // K DRAM tile window for
+                                                                    // load
+
+        auto q_block_tile = load_tile(q_dram_window); // prefetch, global read 0
+        auto k_block_tile = load_tile(k_dram_window);
+
         index_t i_total_loops = 0;
         do
         {
-            // STAGE 1, QK gemm
-            auto q_dram_window = make_tile_window(
-                q_dram_block_window_tmp.GetBottomTensorView(),
-                q_dram_block_window_tmp.GetWindowLengths(),
-                q_dram_block_window_tmp.GetWindowOrigin(),
-                Policy::template MakeQDramTileDistribution<Problem>()); // Q DRAM tile window for
-                                                                        // load
-
-            auto k_dram_window = make_tile_window(
-                k_dram_block_window.GetBottomTensorView(),
-                k_dram_block_window.GetWindowLengths(),
-                k_dram_block_window.GetWindowOrigin(),
-                Policy::template MakeKDramTileDistribution<Problem>()); // K DRAM tile window for
-                                                                        // load
-
-            auto q_block_tile = load_tile(q_dram_window); // prefetch, global read 0
-            auto k_block_tile = load_tile(k_dram_window);
             {
                 move_tile_window(q_dram_window, {0, kK0}); // move to 1
                 move_tile_window(k_dram_window, {0, kK0});
@@ -258,6 +259,29 @@ struct BlockFmhaPipelineQKVS
                        tile_elementwise_in(v_element_func, v_prefetch)); // store the prefetch
             move_tile_window(v_dram_window, {0, kK1});
 
+            // move K tile windows
+            move_tile_window(k_dram_block_window, {kN0, 0});
+
+            // STAGE 1, QK gemm
+            {
+                q_dram_window = make_tile_window(
+                    q_dram_block_window_tmp.GetBottomTensorView(),
+                    q_dram_block_window_tmp.GetWindowLengths(),
+                    q_dram_block_window_tmp.GetWindowOrigin(),
+                    Policy::template MakeQDramTileDistribution<Problem>()); // Q DRAM tile window
+                                                                            // for load
+
+                k_dram_window = make_tile_window(
+                    k_dram_block_window.GetBottomTensorView(),
+                    k_dram_block_window.GetWindowLengths(),
+                    k_dram_block_window.GetWindowOrigin(),
+                    Policy::template MakeKDramTileDistribution<Problem>()); // K DRAM tile window
+                                                                            // for load
+
+                q_block_tile = load_tile(q_dram_window); // prefetch, global read 0
+                k_block_tile = load_tile(k_dram_window);
+            }
+
             const auto p =
                 tile_elementwise_in(type_convert<PDataType, SMPLComputeDataType>, p_compute);
 
@@ -286,8 +310,6 @@ struct BlockFmhaPipelineQKVS
                        v_lds_window);
                 block_sync_lds();
             }
-            // move K tile windows
-            move_tile_window(k_dram_block_window, {kN0, 0});
 
             i_total_loops++;
         } while(i_total_loops < num_total_loop);
