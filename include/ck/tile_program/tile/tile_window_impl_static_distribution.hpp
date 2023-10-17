@@ -30,6 +30,9 @@ struct TileWindowWithStaticDistribution
     static constexpr index_t NDimWindowAdaptorTop = WindowAdaptor::GetNumOfTopDimension();
     static constexpr index_t NDimBottomTensor     = BottomTensorDesc::GetNumOfDimension();
 
+    static constexpr index_t NDimP = TileDstr::GetNumOfDimensionP();
+    static constexpr index_t NDimY = TileDstr::GetNumOfDimensionY();
+
     // TODO: check WindowLengths and StaticTileDistribution are consistent
 
     static_assert(is_known_at_compile_time<WindowLengths>::value,
@@ -50,11 +53,6 @@ struct TileWindowWithStaticDistribution
 
     struct LoadStoreTraits
     {
-        static constexpr index_t NDimP = TileDstr::GetNumOfDimensionP();
-        static constexpr index_t NDimY = TileDstr::GetNumOfDimensionY();
-
-        using DataType = remove_cvref_t<typename BottomTensorView_::DataType>;
-
         private:
         static constexpr auto GetVectorDimYScalarPerVector()
         {
@@ -83,8 +81,8 @@ struct TileWindowWithStaticDistribution
         using vector_type_t = vector_type_maker_t<DataType, ScalarPerVector>;
         using vector_t      = typename vector_type_t::type;
 
-        static constexpr auto GetScalarsPerAccess()
-        {
+        private:
+        static constexpr auto scalars_per_access_ = [] {
             constexpr auto scalars_per_access_arr = generate_array(
                 [&](auto i) { return (i == VectorDimY) ? ScalarPerVector : 1; }, Number<NDimY>{});
 
@@ -92,9 +90,8 @@ struct TileWindowWithStaticDistribution
             constexpr auto NDimY_ = NDimY;
 
             return TO_SEQUENCE(scalars_per_access_arr, NDimY_);
-        }
+        }();
 
-        private:
         static constexpr auto GetSpaceFillingCurve()
         {
             constexpr auto tile_dstr = TileDstr{};
@@ -104,7 +101,7 @@ struct TileWindowWithStaticDistribution
 
             return SpaceFillingCurve<decltype(thread_tensor_lengths_ys),
                                      typename arithmetic_sequence_gen<0, NDimY, 1>::type,
-                                     decltype(GetScalarsPerAccess())>{};
+                                     decltype(scalars_per_access_)>{};
         }
 
         public:
@@ -137,14 +134,14 @@ struct TileWindowWithStaticDistribution
     {
 #if 0 // debug
       // only support warp-tile and block-tile
-        static_assert(TileDstr::NDimP == 1 or TileDstr::NDimP == 2, "wrong!");
+        static_assert(NDimP == 1 or NDimP == 2, "wrong!");
 
-        if constexpr(TileDstr::NDimP == 1)
+        if constexpr(NDimP == 1)
         {
             window_adaptor_thread_coord_ = make_tensor_adaptor_coordinate(
                 tile_distribution.GetPsYs2XsAdaptor(), AdaptorTopIndex{get_lane_id(), 0});
         }
-        else if constexpr(TileDstr::NDimP == 2)
+        else if constexpr(NDimP == 2)
         {
             window_adaptor_thread_coord_ =
                 make_tensor_adaptor_coordinate(tile_distribution.GetPsYs2XsAdaptor(),
@@ -152,27 +149,26 @@ struct TileWindowWithStaticDistribution
         }
 #elif 0
         // only support warp-tile and block-tile
-        static_assert(TileDstr::NDimP == 1 or TileDstr::NDimP == 2, "wrong!");
+        static_assert(NDimP == 1 or NDimP == 2, "wrong!");
 
-        if constexpr(TileDstr::NDimP == 1)
+        if constexpr(NDimP == 1)
         {
             window_adaptor_thread_coord_ = make_tensor_adaptor_coordinate(
                 tile_distribution.GetPsYs2XsAdaptor(),
-                container_concat(Array<index_t, 1>{get_lane_id()},
-                                 Array<index_t, TileDstr::NDimY>{0}));
+                container_concat(Array<index_t, 1>{get_lane_id()}, Array<index_t, NDimY>{0}));
         }
-        else if constexpr(TileDstr::NDimP == 2)
+        else if constexpr(NDimP == 2)
         {
             window_adaptor_thread_coord_ = make_tensor_adaptor_coordinate(
                 tile_distribution.GetPsYs2XsAdaptor(),
                 container_concat(Array<index_t, 2>{get_warp_id(), get_lane_id()},
-                                 Array<index_t, TileDstr::NDimY>{0}));
+                                 Array<index_t, NDimY>{0}));
         }
 #else
         window_adaptor_thread_coord_ = make_tensor_adaptor_coordinate(
             tile_distribution.GetPsYs2XsAdaptor(),
             container_concat(detail::get_partition_index(tile_distribution),
-                             Array<index_t, TileDstr::NDimY>{0}));
+                             Array<index_t, NDimY>{0}));
 #endif
 
         BottomTensorIndex bottom_tensor_thread_origin_idx;
@@ -214,7 +210,7 @@ struct TileWindowWithStaticDistribution
                         constexpr auto idx_diff_ys = SFC_Ys::GetForwardStep(iAccess);
 
                         constexpr auto idx_diff_ps_ys =
-                            container_concat(Array<index_t, Traits::NDimP>{0}, idx_diff_ys);
+                            container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
                         MoveWindowAdaptorAndBottomTensorThreadCoordinate(
                             window_adaptor_thread_coord,
@@ -325,18 +321,13 @@ struct TileWindowWithStaticDistribution
                           get_container_subset(window_adaptor_ps_ys_vector_strides, y_dims));
     }
 
-    template <typename DataType_>
-    __device__ void Store(const StaticDistributedTensor<DataType_, TileDstr>& dstr_tensor) const
+    __device__ void Store(const StaticDistributedTensor<DataType, TileDstr>& dstr_tensor) const
     {
-        static_assert(is_same_v<DataType_, DataType>,
-                      "Unmatched DataType of tile window & distributed tensor");
-
         using Traits = LoadStoreTraits;
 
         using vector_type_t = typename Traits::vector_type_t;
         using vector_t      = typename vector_type_t::type;
-
-        using SFC_Ys = typename Traits::SFC_Ys;
+        using SFC_Ys        = typename Traits::SFC_Ys;
 
         constexpr auto tile_dstr = TileDstr{};
 
@@ -361,11 +352,11 @@ struct TileWindowWithStaticDistribution
                             return jj == Traits::VectorDimY ? (idx_ys_start[jj] + j)
                                                             : idx_ys_start[jj];
                         },
-                        Number<Traits::NDimY>{});
+                        Number<NDimY>{});
 
                     constexpr index_t d = tile_dstr.GetYs2DDescriptor().CalculateOffset(idx_ys);
 
-                    vec.template AsType<typename Traits::DataType>()(j) =
+                    vec.template AsType<DataType>()(j) =
                         dstr_tensor.GetThreadBuffer().template At<d>();
                 });
 
@@ -381,7 +372,7 @@ struct TileWindowWithStaticDistribution
                     constexpr auto idx_diff_ys = SFC_Ys::GetForwardStep(iAccess);
 
                     constexpr auto idx_diff_ps_ys =
-                        container_concat(Array<index_t, Traits::NDimP>{0}, idx_diff_ys);
+                        container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
                     MoveWindowAdaptorAndBottomTensorThreadCoordinate(
                         window_adaptor_thread_coord, bottom_tensor_thread_coord, idx_diff_ps_ys);
