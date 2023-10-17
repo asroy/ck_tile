@@ -16,36 +16,6 @@
 namespace ck {
 namespace tile_program {
 
-// detail used by tile-programming APIs(), not supposed to be used directly
-namespace detail {
-
-// TODO: deprecate
-// "Y dimension": Y dimensions inside TileWindowWithStaticDistribution
-// input:
-//   y_slice_origin: starting slice origin of Y dimension
-//   y_slice_lengths: slice lengths of Y dimensionr
-// output:
-//   A StaticBuffer holding slice of thread data, and data layout is hardcoded to be in the order of
-//   [Y0, Y1, Y2, ...]
-template <typename BottomTensorView_,
-          typename WindowLengths_,
-          typename TileDistribution_,
-          index_t HintNumCoords_,
-          typename YIndex,
-          index_t... YSliceLengths>
-__device__ auto load_sliced_thread_data_from_tile_window(
-    TileWindowWithStaticDistribution<BottomTensorView_,
-                                     WindowLengths_,
-                                     TileDistribution_,
-                                     HintNumCoords_>& tile_window,
-    const YIndex& ys_slice_origin,
-    Sequence<YSliceLengths...> y_slice_lengths)
-{
-    return tile_window.LoadSlicedThreadData(ys_slice_origin, y_slice_lengths);
-}
-
-} // namespace detail
-
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
