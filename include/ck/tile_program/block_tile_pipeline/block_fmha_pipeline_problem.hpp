@@ -18,6 +18,7 @@ template <typename QDataType_,
           typename PDataType_,
           typename OaccDataType_,
           typename ODataType_,
+          index_t kBlockSize_,
           typename BlockFmhaShape_>
 struct BlockFmhaPipelineProblem
 {
@@ -31,7 +32,7 @@ struct BlockFmhaPipelineProblem
     using ODataType           = remove_cvref_t<ODataType_>;
     using BlockFmhaShape      = remove_cvref_t<BlockFmhaShape_>;
 
-    static constexpr index_t kBlockSize = BlockFmhaShape::kBlockSize;
+    static constexpr index_t kBlockSize = kBlockSize_;
 };
 
 } // namespace block
