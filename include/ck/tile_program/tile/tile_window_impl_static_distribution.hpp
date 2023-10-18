@@ -12,6 +12,7 @@
 
 namespace ck {
 namespace tile_program {
+
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename StaticTileDistribution_,
@@ -32,6 +33,9 @@ struct TileWindowWithStaticDistribution
 
     static constexpr index_t NDimP = TileDstr::GetNumOfDimensionP();
     static constexpr index_t NDimY = TileDstr::GetNumOfDimensionY();
+
+    static constexpr auto I0 = Number<0>{};
+    static constexpr auto I1 = Number<1>{};
 
     // TODO: check WindowLengths and StaticTileDistribution are consistent
 
@@ -113,7 +117,6 @@ struct TileWindowWithStaticDistribution
         static constexpr index_t NumAccess = SFC_Ys::GetNumOfAccess();
 
         static_assert(0 < NumAccess, "Wrong! NumAccess should be larger than 0");
-
         static_assert(NumAccess % NumCoord == 0, "wrong! # of access is not divisible by NumCoord");
     };
 
@@ -133,6 +136,8 @@ struct TileWindowWithStaticDistribution
           pre_computed_coords_{}
     {
 #if 0 // debug
+      // TODO: this use more register for FA, but less register for GEMM
+      // need investigation
       // only support warp-tile and block-tile
         static_assert(NDimP == 1 or NDimP == 2, "wrong!");
 
@@ -149,39 +154,17 @@ struct TileWindowWithStaticDistribution
                 make_tensor_adaptor_coordinate(tile_distribution.GetPsYs2XsAdaptor(),
                                                AdaptorTopIndex{get_warp_id(), get_lane_id(), 0});
         }
-#elif 0
-        // only support warp-tile and block-tile
-        static_assert(NDimP == 1 or NDimP == 2, "wrong!");
-
-        WindowAdaptorCoord window_adaptor_thread_coord_tmp;
-
-        if constexpr(NDimP == 1)
-        {
-            window_adaptor_thread_coord_tmp = make_tensor_adaptor_coordinate(
-                tile_distribution.GetPsYs2XsAdaptor(),
-                container_concat(Array<index_t, 1>{get_lane_id()}, Array<index_t, NDimY>{0}));
-        }
-        else if constexpr(NDimP == 2)
-        {
-            window_adaptor_thread_coord_tmp = make_tensor_adaptor_coordinate(
-                tile_distribution.GetPsYs2XsAdaptor(),
-                container_concat(Array<index_t, 2>{get_warp_id(), get_lane_id()},
-                                 Array<index_t, NDimY>{0}));
-        }
 #else
+        // TODO: this use less register for FA, but more register for GEMM
+        // need investigation
         const auto window_adaptor_thread_coord_tmp = make_tensor_adaptor_coordinate(
             tile_distribution.GetPsYs2XsAdaptor(),
             container_concat(detail::get_partition_index(tile_distribution),
                              Array<index_t, NDimY>{0}));
 #endif
 
-        BottomTensorIndex bottom_tensor_thread_origin_idx_tmp;
-
-        for(index_t i = 0; i < NDimBottomTensor; ++i)
-        {
-            bottom_tensor_thread_origin_idx_tmp(i) =
-                window_origin[i] + window_adaptor_thread_coord_tmp.GetBottomIndex()[i];
-        }
+        BottomTensorIndex bottom_tensor_thread_origin_idx_tmp =
+            window_origin + window_adaptor_thread_coord_tmp.GetBottomIndex();
 
         const auto bottom_tensor_thread_coord_tmp = make_tensor_coordinate(
             bottom_tensor_view_.GetTensorDescriptor(), bottom_tensor_thread_origin_idx_tmp);
@@ -196,7 +179,7 @@ struct TileWindowWithStaticDistribution
             auto bottom_tensor_thread_coord  = bottom_tensor_thread_coord_tmp;
 
             constexpr auto idx_diff_ys =
-                SFC_Ys::GetStepBetween(Number<iCoord * NumAccessPerCoord>{}, Number<0>{});
+                SFC_Ys::GetStepBetween(Number<0>{}, Number<iCoord * NumAccessPerCoord>{});
 
             constexpr auto idx_diff_ps_ys = container_concat(Array<index_t, NDimP>{0}, idx_diff_ys);
 
@@ -291,8 +274,8 @@ struct TileWindowWithStaticDistribution
         // loop over thread tensor space [y0, y1, ...]
         static_for<0, NumCoord, 1>{}([&](auto iCoord) {
             /// TODO: use structure binding (to be captured later) if compiled in C++20
-            auto window_adaptor_thread_coord = pre_computed_coords_[iCoord].template At<0>();
-            auto bottom_tensor_thread_coord  = pre_computed_coords_[iCoord].template At<1>();
+            auto window_adaptor_thread_coord = pre_computed_coords_[iCoord][I0];
+            auto bottom_tensor_thread_coord  = pre_computed_coords_[iCoord][I1];
 
             static_for<0, NumAccessPerCoord, 1>{}([&](auto iCoordAccess) {
                 constexpr auto iAccess = Number<iCoord * NumAccessPerCoord + iCoordAccess>{};
@@ -352,8 +335,8 @@ struct TileWindowWithStaticDistribution
         // loop over thread tensor space [y0, y1, ...]
         static_for<0, NumCoord, 1>{}([&](auto iCoord) {
             /// TODO: use structure binding (to be captured later) if compiled in C++20
-            auto window_adaptor_thread_coord = pre_computed_coords_[iCoord].template At<0>();
-            auto bottom_tensor_thread_coord  = pre_computed_coords_[iCoord].template At<1>();
+            auto window_adaptor_thread_coord = pre_computed_coords_[iCoord][I0];
+            auto bottom_tensor_thread_coord  = pre_computed_coords_[iCoord][I1];
 
             static_for<0, NumAccessPerCoord, 1>{}([&](auto iCoordAccess) {
                 constexpr auto iAccess = Number<iCoord * NumAccessPerCoord + iCoordAccess>{};
@@ -407,9 +390,8 @@ struct TileWindowWithStaticDistribution
         window_origin_ += step;
 
         static_for<0, NumCoord, 1>{}([&](auto iCoord) {
-            move_tensor_coordinate(bottom_tensor_view_.GetTensorDescriptor(),
-                                   pre_computed_coords_(iCoord).template At<1>(),
-                                   step);
+            move_tensor_coordinate(
+                bottom_tensor_view_.GetTensorDescriptor(), pre_computed_coords_(iCoord)(I1), step);
         });
     }
 
