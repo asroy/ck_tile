@@ -123,14 +123,19 @@ struct BlockFmhaPipelineQKVS
         using MLBlockTileType = decltype(block_tile_reduce<SMPLComputeDataType>(
             SBlockTileType{}, Sequence<1>{}, f_max, SMPLComputeDataType{0}));
 
-        using OaccBlockTileType = decltype(
-            gemm_1(get_slice_tile(PBlockTileType{}, Sequence<0, 0>{}, Sequence<kM0, kK1>{}),
-                   v_lds_window));
+        using OaccBlockTileType = decltype(gemm_1(
+            get_slice_tile(PBlockTileType{}, Sequence<0, 0>{}, Sequence<kM0, kK1>{}),
+            v_lds_window));
 
         // init Oacc, M, L
         auto o_acc = OaccBlockTileType{};
         auto m     = MLBlockTileType{};
         auto l     = MLBlockTileType{};
+
+        tile_elementwise_inout([](auto& e) { e = 0; }, o_acc);
+        tile_elementwise_inout([](auto& e) { e = NumericLimits<SMPLComputeDataType>::Lowest(); },
+                               m);
+        tile_elementwise_inout([](auto& e) { e = 0; }, l);
 
         auto k_dram_block_window = k_dram_block_window_tmp;
         auto v_dram_window =

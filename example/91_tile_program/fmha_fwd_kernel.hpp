@@ -23,7 +23,7 @@ struct FmhaFwdKernel
     using VDataType = ck::remove_cvref_t<typename FmhaPipeline::VDataType>;
     using ODataType = ck::remove_cvref_t<typename FmhaPipeline::ODataType>;
 
-    struct Kargs : EpiloguePipeline::Kargs
+    struct Kargs
     {
         const void* q_ptr;
         const void* k_ptr;
@@ -60,8 +60,7 @@ struct FmhaFwdKernel
                                               ck::index_t batch_stride_v,
                                               ck::index_t batch_stride_o)
     {
-        return Kargs{{} /* empty aggregate */,
-                     q_ptr,
+        return Kargs{q_ptr,
                      k_ptr,
                      v_ptr,
                      o_ptr,

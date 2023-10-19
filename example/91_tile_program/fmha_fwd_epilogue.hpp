@@ -21,10 +21,6 @@ struct FmhaFwdEpilogue
     using OaccDataType = ck::remove_cvref_t<typename Problem::OaccDataType>;
     using ODataType    = ck::remove_cvref_t<typename Problem::ODataType>;
 
-    struct Kargs
-    {
-    }; // empty karg
-
     __host__ __device__ static constexpr ck::index_t GetSmemSize() { return 0; }
 
     template <typename ODramWindowTmp, typename OAccTile>
