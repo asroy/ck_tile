@@ -34,6 +34,8 @@ struct FmhaFwdKernel
         ck::index_t hdim_q;
         ck::index_t hdim_v;
 
+        float scale;
+
         ck::index_t stride_q;
         ck::index_t stride_k;
         ck::index_t stride_v;
@@ -58,6 +60,7 @@ struct FmhaFwdKernel
                                               ck::index_t seqlen_k,
                                               ck::index_t hdim_q,
                                               ck::index_t hdim_v,
+                                              float scale,
                                               ck::index_t stride_q,
                                               ck::index_t stride_k,
                                               ck::index_t stride_v,
@@ -71,11 +74,11 @@ struct FmhaFwdKernel
                                               ck::index_t batch_stride_v,
                                               ck::index_t batch_stride_o)
     {
-        return Kargs{q_ptr,          k_ptr,          v_ptr,          o_ptr,
-                     seqlen_q,       seqlen_k,       hdim_q,         hdim_v,
-                     stride_q,       stride_k,       stride_v,       stride_o,
-                     nhead_stride_q, nhead_stride_k, nhead_stride_v, nhead_stride_o,
-                     batch_stride_q, batch_stride_k, batch_stride_v, batch_stride_o};
+        return Kargs{q_ptr,          k_ptr,          v_ptr,          o_ptr,          seqlen_q,
+                     seqlen_k,       hdim_q,         hdim_v,         scale,          stride_q,
+                     stride_k,       stride_v,       stride_o,       nhead_stride_q, nhead_stride_k,
+                     nhead_stride_v, nhead_stride_o, batch_stride_q, batch_stride_k, batch_stride_v,
+                     batch_stride_o};
     }
 
     __host__ static constexpr auto GridSize(ck::index_t batch_size_,
@@ -173,6 +176,7 @@ struct FmhaFwdKernel
         auto o_acc_tile = FmhaPipeline{}(q_dram_window,
                                          k_dram_window,
                                          v_dram_window,
+                                         kargs.scale,
                                          kargs.seqlen_k / FmhaPipeline::kN0,
                                          kargs.hdim_q / FmhaPipeline::kK0,
                                          smem_ptr);

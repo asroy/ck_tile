@@ -60,6 +60,8 @@ int main(int argc, char* argv[])
     ck::index_t hdim_q   = 128;
     ck::index_t hdim_v   = 128;
 
+    float scale = .0f;
+
     bool i_perm = true; // if true, will be batch * nhead * seqlen * hdim
     bool o_perm = true; // if false, will be batch * seqlen * nhead * hdim
 
@@ -76,13 +78,14 @@ int main(int argc, char* argv[])
         hdim_v   = std::stoi(argv[7]);
     }
     if(argc >= 9)
-    {
-        i_perm = static_cast<bool>(std::stoi(argv[8]));
-    }
+        scale = std::stof(argv[8]);
     if(argc >= 10)
-    {
-        o_perm = static_cast<bool>(std::stoi(argv[9]));
-    }
+        i_perm = static_cast<bool>(std::stoi(argv[9]));
+    if(argc >= 11)
+        o_perm = static_cast<bool>(std::stoi(argv[10]));
+
+    if(scale == .0f)
+        scale = 1.0 / ck::math::sqrt(static_cast<float>(hdim_q)); // TODO: q ? v ?
 
     auto get_lengths = [&](bool permute,
                            ck::index_t b /*batch*/,
@@ -125,6 +128,7 @@ int main(int argc, char* argv[])
 
     std::cout << "batch:" << batch << ", nhead:" << nhead << ", seqlen_q:" << seqlen_q
               << ", seqlen_k:" << seqlen_k << ", hdim_q:" << hdim_q << ", hdim_v:" << hdim_v
+              << ", scale:" << scale << ", i_perm:" << i_perm << ", o_perm:" << o_perm
               << ", grid_size " << kGridSize.x << "x" << kGridSize.y << "x" << kGridSize.z
               << std::endl;
 
@@ -137,10 +141,11 @@ int main(int argc, char* argv[])
                                        k_buf.GetDeviceBuffer(),
                                        v_buf.GetDeviceBuffer(),
                                        o_buf.GetDeviceBuffer(),
-                                       seqlen_q,                              // seqlen_q
-                                       seqlen_k,                              // seqlen_k
-                                       hdim_q,                                // hdim_q
-                                       hdim_v,                                // hdim_v
+                                       seqlen_q, // seqlen_q
+                                       seqlen_k, // seqlen_k
+                                       hdim_q,   // hdim_q
+                                       hdim_v,   // hdim_v
+                                       scale,
                                        i_perm ? hdim_q : nhead * hdim_q,      // stride_q
                                        i_perm ? hdim_q : nhead * hdim_q,      // stride_k
                                        i_perm ? seqlen_k : nhead * seqlen_k,  // stride_v
@@ -200,7 +205,10 @@ int main(int argc, char* argv[])
 
         // reference
         reference_batched_gemm<QDataType, KDataType, SaccDataType, SMPLComputeDataType>(
-            q_host_ref, k_host_ref, s_host_ref);
+            q_host_ref, k_host_ref, s_host_ref,
+            [](const QDataType& x) { return x; },
+            [](const KDataType& x) { return x; },
+            [&scale](const SaccDataType& x) { return scale * x; });
         reference_batched_softmax<SMPLComputeDataType, SMPLComputeDataType, PDataType>(s_host_ref,
                                                                                        p_host_ref);
         reference_batched_gemm<PDataType, VDataType, OaccDataType, ODataType>(

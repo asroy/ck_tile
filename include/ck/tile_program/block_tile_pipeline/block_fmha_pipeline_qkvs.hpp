@@ -63,6 +63,7 @@ struct BlockFmhaPipelineQKVS
                const KElementFunction& k_element_func,
                const VDramBlockWindowTmp& v_dram_block_window_tmp, // N1*K1 tile
                const VElementFunction& v_element_func,
+               float scale,
                index_t num_total_loop,
                index_t num_sub_loop_qk,
                void* smem_ptr) const
@@ -123,9 +124,9 @@ struct BlockFmhaPipelineQKVS
         using MLBlockTileType = decltype(block_tile_reduce<SMPLComputeDataType>(
             SBlockTileType{}, Sequence<1>{}, f_max, SMPLComputeDataType{0}));
 
-        using OaccBlockTileType = decltype(gemm_1(
-            get_slice_tile(PBlockTileType{}, Sequence<0, 0>{}, Sequence<kM0, kK1>{}),
-            v_lds_window));
+        using OaccBlockTileType = decltype(
+            gemm_1(get_slice_tile(PBlockTileType{}, Sequence<0, 0>{}, Sequence<kM0, kK1>{}),
+                   v_lds_window));
 
         // init Oacc, M, L
         auto o_acc = OaccBlockTileType{};
@@ -215,6 +216,8 @@ struct BlockFmhaPipelineQKVS
             }
 
             // STAGE 2, scale softmax
+            tile_elementwise_inout([&scale](auto& x) { x = x * scale; }, s_acc);
+
             const auto s =
                 tile_elementwise_in(type_convert<SMPLComputeDataType, SaccDataType>, s_acc); // S{j}
             auto m_local = block_tile_reduce<SMPLComputeDataType>(
@@ -319,6 +322,7 @@ struct BlockFmhaPipelineQKVS
     operator()(const QDramBlockWindowTmp& q_dram_block_window_tmp, // M0*K0 tile
                const KDramBlockWindowTmp& k_dram_block_window_tmp, // N0*K0 tile
                const VDramBlockWindowTmp& v_dram_block_window_tmp, // N1*K1 tile
+               float scale,
                index_t num_total_loop,
                index_t num_sub_loop_qk,
                void* smem_ptr) const
@@ -330,6 +334,7 @@ struct BlockFmhaPipelineQKVS
             [](const KDataType& x) { return x; },
             v_dram_block_window_tmp,
             [](const VDataType& x) { return x; },
+            scale,
             num_total_loop,
             num_sub_loop_qk,
             smem_ptr);
