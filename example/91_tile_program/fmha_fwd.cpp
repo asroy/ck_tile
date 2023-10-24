@@ -21,6 +21,7 @@
 #include "reference_batched_gemm.hpp"
 #include "reference_batched_softmax.hpp"
 #include "fmha_fwd_kernel.hpp"
+#include "fmha_fwd_tile_scheduler.hpp"
 #include "fmha_fwd_epilogue.hpp"
 
 using QDataType           = ck::half_t;
@@ -34,7 +35,7 @@ using ODataType           = ck::half_t;
 
 using FmhaShape = ck::tile_program::
     TileFmhaShape<128 /*seqlen_q*/, 128 /*seqlen_k*/, 32 /*hdim_q*/, 128 /*hdim_v*/, 32 /*K1*/>;
-
+using FmhaTileScheduler   = FmhaFwdTileScheduler<FmhaShape>;
 using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<QDataType,
                                                                               KDataType,
                                                                               VDataType,
@@ -48,7 +49,7 @@ using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<QD
 using FmhaPipeline        = ck::tile_program::block::BlockFmhaPipelineQKVS<FmhaPipelineProblem>;
 
 using FmhaEpilogue = FmhaFwdEpilogue<FmhaFwdEpilogueProblem<OaccDataType, ODataType>>;
-using FmhaKernel   = FmhaFwdKernel<FmhaPipeline, FmhaEpilogue>;
+using FmhaKernel   = FmhaFwdKernel<FmhaTileScheduler, FmhaPipeline, FmhaEpilogue>;
 
 int main(int argc, char* argv[])
 {
