@@ -8,7 +8,7 @@
 #include "ck/tile_program/tile/tile_elementwise.hpp"
 
 template <typename BlockFmhaShape_>
-struct FmhaFwdTileScheduler
+struct FmhaFwdTilePartitioner
 {
     using BlockFmhaShape = ck::remove_cvref_t<BlockFmhaShape_>;
 

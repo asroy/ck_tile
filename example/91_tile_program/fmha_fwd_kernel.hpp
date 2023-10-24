@@ -11,10 +11,10 @@
 // P[seqlen_q, seqlen_k] = Softmax(S[seqlen_q, seqlen_k])
 // O[seqlen_q, hdim_v] = P[seqlen_q, seqlen_k] * V[hdim_v, seqlen_k]
 
-template <typename TileScheduler_, typename FmhaPipeline_, typename EpiloguePipeline_>
+template <typename TilePartitioner_, typename FmhaPipeline_, typename EpiloguePipeline_>
 struct FmhaFwdKernel
 {
-    using TileScheduler                     = ck::remove_cvref_t<TileScheduler_>;
+    using TilePartitioner                   = ck::remove_cvref_t<TilePartitioner_>;
     using FmhaPipeline                      = ck::remove_cvref_t<FmhaPipeline_>;
     using EpiloguePipeline                  = ck::remove_cvref_t<EpiloguePipeline_>;
     static constexpr ck::index_t kBlockSize = FmhaPipeline::kBlockSize;
@@ -87,7 +87,7 @@ struct FmhaFwdKernel
                                             ck::index_t seqlen_q_,
                                             ck::index_t hdim_v_)
     {
-        return TileScheduler::GridSize(batch_size_, nhead_, seqlen_q_, hdim_v_);
+        return TilePartitioner::GridSize(batch_size_, nhead_, seqlen_q_, hdim_v_);
     }
 
     __host__ static constexpr auto BlockSize() { return dim3(kBlockSize); }
@@ -108,7 +108,7 @@ struct FmhaFwdKernel
 
         // divide problem
         const auto [i_tile_m, i_tile_n, i_nhead, i_batch] =
-            TileScheduler{}(kargs.seqlen_q, kargs.hdim_v);
+            TilePartitioner{}(kargs.seqlen_q, kargs.hdim_v);
 
         const index_t i_m0 = __builtin_amdgcn_readfirstlane(i_tile_m * FmhaPipeline::kM0);
         const index_t i_n1 = __builtin_amdgcn_readfirstlane(i_tile_n * FmhaPipeline::kN1);
