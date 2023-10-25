@@ -11,6 +11,8 @@
 // P[seqlen_q, seqlen_k] = Softmax(S[seqlen_q, seqlen_k])
 // O[seqlen_q, hdim_v] = P[seqlen_q, seqlen_k] * V[hdim_v, seqlen_k]
 
+#define C_LOG2E    1.44269504088896340736   // log2(e)
+
 template <typename TilePartitioner_, typename FmhaPipeline_, typename EpiloguePipeline_>
 struct FmhaFwdKernel
 {
