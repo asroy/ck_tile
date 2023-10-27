@@ -124,9 +124,9 @@ struct BlockFmhaPipelineQKVS
         using MLBlockTileType = decltype(block_tile_reduce<SMPLComputeDataType>(
             SBlockTileType{}, Sequence<1>{}, f_max, SMPLComputeDataType{0}));
 
-        using OaccBlockTileType = decltype(
-            gemm_1(get_slice_tile(PBlockTileType{}, Sequence<0, 0>{}, Sequence<kM0, kK1>{}),
-                   v_lds_window));
+        using OaccBlockTileType = decltype(gemm_1(
+            get_slice_tile(PBlockTileType{}, Sequence<0, 0>{}, Sequence<kM0, kK1>{}),
+            v_lds_window));
 
         // init Oacc, M, L
         auto o_acc = OaccBlockTileType{};
@@ -248,11 +248,12 @@ struct BlockFmhaPipelineQKVS
 
             block_tile_reduce_sync(rowsum_p, f_sum);
             // l{j}, Oacc{j}
-            sweep_tile_span(p_spans[Number<0>{}], [&](auto idx0) {
+            constexpr auto o_spans = decltype(o_acc)::GetDistributedSpans();
+            sweep_tile_span(o_spans[Number<0>{}], [&](auto idx0) {
                 constexpr auto i_idx = make_tuple(idx0);
                 const auto tmp       = math::exp(m_old[i_idx] - m[i_idx]);
                 l(i_idx)             = tmp * l[i_idx] + rowsum_p[i_idx];
-                sweep_tile_span(p_spans[Number<1>{}], [&](auto idx1) {
+                sweep_tile_span(o_spans[Number<1>{}], [&](auto idx1) {
                     constexpr auto i_j_idx = make_tuple(idx0, idx1);
                     // FIXME: this use different equation from FA v2 paper,
                     // but produce correc result.

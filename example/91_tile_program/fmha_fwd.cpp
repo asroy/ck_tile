@@ -33,8 +33,11 @@ using PDataType           = ck::half_t; // data type for A matrix of second gemm
 using OaccDataType        = float;      // data type for second gemm accumulation
 using ODataType           = ck::half_t;
 
-using FmhaShape = ck::tile_program::
-    TileFmhaShape<128 /*seqlen_q*/, 128 /*seqlen_k*/, 32 /*hdim_q*/, 128 /*hdim_v*/, 32 /*K1*/>;
+//                                                 M0   N0  K0   N1  K1
+// using FmhaShape = ck::tile_program::TileFmhaShape<128,  64, 64, 128, 64>;
+// using FmhaShape = ck::tile_program::TileFmhaShape<128, 256, 32, 128, 32>;
+using FmhaShape = ck::tile_program::TileFmhaShape<128, 128, 32, 128, 32>;
+
 using FmhaTilePartitioner = FmhaFwdTilePartitioner<FmhaShape>;
 using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<QDataType,
                                                                               KDataType,
