@@ -11,7 +11,7 @@
 #include "ck/tile_program/tile/tile_distribution.hpp"
 #include "ck/tile_program/tile/tile_elementwise.hpp"
 #include "ck/tile_program/tile/tile_gemm_shape.hpp"
-#include "ck/tile_program/warp_tile/warp_gemm.hpp"
+#include "ck/tile_program/warp_tile/warp_gemm_dispatcher.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_gemm_pipeline_problem.hpp"
 #include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_v1.hpp"
 #include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_v1_custom_policy.hpp"
@@ -224,14 +224,14 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
                                      TileGemmShape<Problem::BlockFmhaShape::kM0,
                                                    Problem::BlockFmhaShape::kN0,
                                                    Problem::BlockFmhaShape::kK0>>;
-        // using WarpGemm = ck::tile_program::warp::WarpGemmMfma<typename Problem::QDataType,
-        // typename Problem::KDataType, typename Problem::SaccDataType,
+        // using WarpGemm = ck::tile_program::warp::WarpGemmMfmaDispatcher<typename
+        // Problem::QDataType, typename Problem::KDataType, typename Problem::SaccDataType,
         //         Problem::BlockFmhaShape::Gemm0WarpTile::At(Number<0>{}),
         //         Problem::BlockFmhaShape::Gemm0WarpTile::At(Number<1>{}),
         //         Problem::BlockFmhaShape::Gemm0WarpTile::At(Number<2>{}), true>;
 
-        using WarpGemm =
-            warp::WarpGemmImpl<warp::WarpGemmAtrributeMfmaIterateKAndTransposedCDistribution_V2<
+        using WarpGemm = warp::WarpGemmImpl<
+            warp::WarpGemmAtrributeMfmaIterateKAndTransposedCDistribution_SwizzleB<
                 warp::WarpGemmAttributeMfmaImplF16F16F32M32N32K8,
                 2>>;
 
@@ -257,7 +257,7 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
                                                    Problem::BlockFmhaShape::kN1,
                                                    Problem::BlockFmhaShape::kK1>>;
         // using BlockGemmPolicy = BlockGemmARegBSmemCRegV1DefaultPolicy;
-        using WarpGemm = ck::tile_program::warp::WarpGemmMfma<
+        using WarpGemm = ck::tile_program::warp::WarpGemmMfmaDispatcher<
             typename Problem::PDataType,
             typename Problem::VDataType,
             typename Problem::OaccDataType,

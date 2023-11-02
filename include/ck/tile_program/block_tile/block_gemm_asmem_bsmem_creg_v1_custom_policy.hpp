@@ -11,7 +11,7 @@
 #include "ck/tile_program/tile/tile_distribution.hpp"
 #include "ck/tile_program/tile/tile_elementwise.hpp"
 #include "ck/tile_program/tile/tile_gemm_shape.hpp"
-#include "ck/tile_program/warp_tile/warp_gemm.hpp"
+#include "ck/tile_program/warp_tile/warp_gemm_dispatcher.hpp"
 
 namespace ck {
 namespace tile_program {
@@ -43,7 +43,8 @@ struct BlockGemmASmemBSmemCRegV1CustomPolicy
 
     static constexpr bool TranposeC = TranposeC_;
 
-    using WarpGemm = WarpGemmMfma<AType, BType, CType, MPerWarp, NPerWarp, KPerWarp, TranposeC>;
+    using WarpGemm = ck::tile_program::warp::
+        WarpGemmMfmaDispatcher<AType, BType, CType, MPerWarp, NPerWarp, KPerWarp, TranposeC>;
 
     template <typename Problem>
     __host__ __device__ static constexpr auto GetWarpGemmMWarpNWarp()
