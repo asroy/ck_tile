@@ -37,13 +37,9 @@ struct BlockGemmARegBGmemCRegV1
     static constexpr index_t kBlockSize = Problem::kBlockSize;
 
     // use BlockGemmARegBSmemCRegV1 as the underlying block-GEMM implementation
-    using BlockGemmARegBSmemCRegImpl =
-        BlockGemmARegBSmemCRegV1<BlockGemmARegBSmemCRegProblem<ADataType,
-                                                                 BDataType,
-                                                                 CDataType,
-                                                                 kBlockSize,
-                                                                 BlockGemmShape>,
-                                 BlockGemmARegBSmemCRegV1DefaultPolicy>;
+    using BlockGemmARegBSmemCRegImpl = BlockGemmARegBSmemCRegV1<
+        BlockGemmARegBSmemCRegProblem<ADataType, BDataType, CDataType, kBlockSize, BlockGemmShape>,
+        BlockGemmARegBSmemCRegV1DefaultPolicy>;
 
     __host__ __device__ static constexpr ck::index_t GetStaticLdsSize()
     {

@@ -15,6 +15,7 @@
 #include "ck/tile_program/warp_tile/warp_gemm.hpp"
 #include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_problem.hpp"
 #include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_v1_default_policy.hpp"
+#include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_v1_iteratek_policy.hpp"
 
 namespace ck {
 namespace tile_program {
@@ -26,10 +27,11 @@ namespace block {
 template <typename Problem, typename Policy = BlockGemmARegBSmemCRegV1DefaultPolicy>
 struct BlockGemmARegBSmemCRegV1
 {
-    using ADataType      = remove_cvref_t<typename Problem::ADataType>;
-    using BDataType      = remove_cvref_t<typename Problem::BDataType>;
-    using CDataType      = remove_cvref_t<typename Problem::CDataType>;
-    using BlockGemmShape = remove_cvref_t<typename Problem::BlockGemmShape>;
+    using ADataType       = remove_cvref_t<typename Problem::ADataType>;
+    using BDataType       = remove_cvref_t<typename Problem::BDataType>;
+    using CDataType       = remove_cvref_t<typename Problem::CDataType>;
+    using BlockGemmShape  = remove_cvref_t<typename Problem::BlockGemmShape>;
+    using BlockGemmPolicy = Policy;
 
     static constexpr index_t kBlockSize = Problem::kBlockSize;
 
@@ -165,7 +167,6 @@ struct BlockGemmARegBSmemCRegV1
                 static_for<0, NIterPerWarp, 1>{}([&](auto nIter) {
                     // read B warp tensor from B Block window
                     const auto b_warp_tensor = load_tile(b_warp_windows(nIter)(kIter));
-
                     // read C warp tensor from C block tensor
                     CWarpTensor c_warp_tensor;
 
