@@ -134,7 +134,9 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
             LanesPerK; // how many groups (within a wave), they may load different N, but same K
         constexpr index_t NumIssues = kNPerBlock / (LaneGroups * NumWarps);
         static_assert(NumIssues == kNPerBlock * kKPerBlock / (kBlockSize * KVector));
-        constexpr index_t BufferSize = NumIssues * NumWarps * (warpSize * KVector + kPad);
+        constexpr index_t SingleKSize = NumIssues * NumWarps * (warpSize * KVector + kPad);
+        constexpr index_t SingleVSize = MakeVLdsBlockDescriptor<Problem>().GetElementSpaceSize();
+        constexpr index_t BufferSize  = math::max(SingleKSize, SingleVSize);
 
         constexpr auto k_lds_block_desc_0 =
             make_naive_tensor_descriptor(make_tuple(Number<KLdsBuffers>{}, // buffers
@@ -186,7 +188,9 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
         constexpr index_t LaneGroups = warpSize / LanesPerK; // within a wave
         constexpr index_t NumIssues  = kNPerBlock / (LaneGroups * NumWarps);
         static_assert(NumIssues == kNPerBlock * kKPerBlock / (kBlockSize * KVector));
-        constexpr index_t BufferSize = NumIssues * NumWarps * (warpSize * KVector + kPad);
+        constexpr index_t SingleKSize = NumIssues * NumWarps * (warpSize * KVector + kPad);
+        constexpr index_t SingleVSize = MakeVLdsBlockDescriptor<Problem>().GetElementSpaceSize();
+        constexpr index_t BufferSize  = math::max(SingleKSize, SingleVSize);
 
         constexpr auto k_lds_block_desc_0 =
             make_naive_tensor_descriptor(make_tuple(Number<KLdsBuffers>{},        // num_buffers

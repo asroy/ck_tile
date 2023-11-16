@@ -19,13 +19,16 @@ namespace tile_program {
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
-          index_t NumCoord>
-__device__ auto load_tile(const TileWindowWithStaticDistribution<BottomTensorView_,
-                                                                 WindowLengths_,
-                                                                 TileDistribution_,
-                                                                 NumCoord>& tile_window)
+          index_t NumCoord,
+          bool use_inline_asm = false>
+__device__ auto
+load_tile(const TileWindowWithStaticDistribution<BottomTensorView_,
+                                                 WindowLengths_,
+                                                 TileDistribution_,
+                                                 NumCoord>& tile_window,
+          integral_constant<bool, use_inline_asm> = integral_constant<bool, false>{})
 {
-    return tile_window.Load();
+    return tile_window.Load(integral_constant<bool, use_inline_asm>{});
 }
 
 template <typename DstDataType_,
