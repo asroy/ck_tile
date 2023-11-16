@@ -28,5 +28,39 @@ __device__ auto load_tile(const TileWindowWithStaticDistribution<BottomTensorVie
     return tile_window.Load();
 }
 
+template <typename DstDataType_,
+          typename DstTileDistribution_,
+          typename BottomTensorView_,
+          typename WindowLengths_,
+          typename TileDistribution_,
+          index_t NumCoord>
+__device__ void load_tile(StaticDistributedTensor<DstDataType_, DstTileDistribution_>& dst_tensor,
+                          const TileWindowWithStaticDistribution<BottomTensorView_,
+                                                                 WindowLengths_,
+                                                                 TileDistribution_,
+                                                                 NumCoord>& tile_window)
+{
+    tile_window.LoadRaw(dst_tensor);
+}
+
+template <typename LdsTileWindow_,
+          typename BottomTensorView_,
+          typename WindowLengths_,
+          typename TileDistribution_,
+          index_t NumCoord>
+__device__ auto async_load_tile(LdsTileWindow_&& lds_tile,
+                                const TileWindowWithStaticDistribution<BottomTensorView_,
+                                                                       WindowLengths_,
+                                                                       TileDistribution_,
+                                                                       NumCoord>& tile_window)
+{
+    return tile_window.AsyncLoad(lds_tile);
+}
+
+__device__ auto async_load_fence(index_t cnt = 0)
+{
+    asm volatile("s_waitcnt vmcnt(%0)" : : "n"(cnt) : "memory");
+}
+
 } // namespace tile_program
 } // namespace ck

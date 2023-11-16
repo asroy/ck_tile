@@ -69,6 +69,28 @@ struct TensorView
               typename enable_if<is_same_v<typename scalar_type<remove_cvref_t<X>>::type,
                                            typename scalar_type<remove_cvref_t<DataType>>::type>,
                                  bool>::type = false>
+    __host__ __device__ void GetVectorizedElementsRaw(remove_cvref_t<X>& dst,
+                                                      const TensorCoord& coord) const
+    {
+        return buf_.template GetRaw<X>(dst, coord.GetOffset());
+    }
+
+    template <typename X,
+              typename enable_if<is_same_v<typename scalar_type<remove_cvref_t<X>>::type,
+                                           typename scalar_type<remove_cvref_t<DataType>>::type>,
+                                 bool>::type = false>
+    __host__ __device__ constexpr void AsyncGetVectorizedElements(remove_cvref_t<DataType>* smem,
+                                                                  const TensorCoord& coord) const
+    {
+        return buf_.template AsyncGet<X>(smem, coord.GetOffset(), true /*not used*/);
+    }
+
+    // X is vector of DataType.
+    // "coord" is coordinate of DataType, not X. "coord" should be aligned to X
+    template <typename X,
+              typename enable_if<is_same_v<typename scalar_type<remove_cvref_t<X>>::type,
+                                           typename scalar_type<remove_cvref_t<DataType>>::type>,
+                                 bool>::type = false>
     __host__ __device__ constexpr void SetVectorizedElements(const TensorCoord& coord, const X& x)
     {
         buf_.template Set<X>(coord.GetOffset(),

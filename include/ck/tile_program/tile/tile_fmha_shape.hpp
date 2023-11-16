@@ -5,6 +5,8 @@
 
 #include "ck/ck.hpp"
 #include "ck/tensor_operation/gpu/device/tensor_layout.hpp"
+#include "ck/utility/sequence.hpp"
+#include "ck/utility/math.hpp"
 
 namespace ck {
 namespace tile_program {
@@ -22,6 +24,12 @@ struct TileFmhaShape
     using Gemm0WarpTile   = remove_cvref_t<Gemm0WarpTile_>;
     using Gemm1BlockWarps = remove_cvref_t<Gemm1BlockWarps_>;
     using Gemm1WarpTile   = remove_cvref_t<Gemm1WarpTile_>;
+
+    static constexpr index_t NumWarps =
+        reduce_on_sequence(Gemm0BlockWarps{}, math::multiplies{}, Number<1>{});
+
+    static_assert(NumWarps ==
+                  reduce_on_sequence(Gemm1BlockWarps{}, math::multiplies{}, Number<1>{}));
 
     static constexpr index_t kM0 = BlockTile::At(Number<0>{}); // tile size along q seqlen
     static constexpr index_t kN0 = BlockTile::At(Number<1>{}); // tile size along k seqlen

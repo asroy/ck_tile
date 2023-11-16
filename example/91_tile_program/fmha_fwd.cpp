@@ -245,39 +245,39 @@ int main(int argc, char* argv[])
               << ", v:" << std::string(FmhaKernelHDim64::VLayout::name) << std::flush << std::endl;
 
     float ave_time = 0;
-    if(hdim_q == hdim_v && hdim_q == 64)
-        ave_time = invoker_fmha_kernel<FmhaKernelHDim64>(q_buf.GetDeviceBuffer(),
-                                                         k_buf.GetDeviceBuffer(),
-                                                         v_buf.GetDeviceBuffer(),
-                                                         o_buf.GetDeviceBuffer(),
-                                                         batch,
-                                                         nhead,
-                                                         seqlen_q,
-                                                         seqlen_k,
-                                                         hdim_q,
-                                                         hdim_v,
-                                                         scale,
-                                                         i_perm,
-                                                         o_perm);
-    else if(hdim_q == hdim_v && hdim_q == 128)
-        ave_time = invoker_fmha_kernel<FmhaKernelHDim128>(q_buf.GetDeviceBuffer(),
-                                                          k_buf.GetDeviceBuffer(),
-                                                          v_buf.GetDeviceBuffer(),
-                                                          o_buf.GetDeviceBuffer(),
-                                                          batch,
-                                                          nhead,
-                                                          seqlen_q,
-                                                          seqlen_k,
-                                                          hdim_q,
-                                                          hdim_v,
-                                                          scale,
-                                                          i_perm,
-                                                          o_perm);
-    else
-    {
-        std::cout << "not support hdim, will not run" << std::endl;
-        return -1;
-    }
+    // if(hdim_q == hdim_v && hdim_q == 64)
+    //     ave_time = invoker_fmha_kernel<FmhaKernelHDim64>(q_buf.GetDeviceBuffer(),
+    //                                                      k_buf.GetDeviceBuffer(),
+    //                                                      v_buf.GetDeviceBuffer(),
+    //                                                      o_buf.GetDeviceBuffer(),
+    //                                                      batch,
+    //                                                      nhead,
+    //                                                      seqlen_q,
+    //                                                      seqlen_k,
+    //                                                      hdim_q,
+    //                                                      hdim_v,
+    //                                                      scale,
+    //                                                      i_perm,
+    //                                                      o_perm);
+    // else if(hdim_q == hdim_v && hdim_q == 128)
+    ave_time = invoker_fmha_kernel<FmhaKernelHDim128>(q_buf.GetDeviceBuffer(),
+                                                      k_buf.GetDeviceBuffer(),
+                                                      v_buf.GetDeviceBuffer(),
+                                                      o_buf.GetDeviceBuffer(),
+                                                      batch,
+                                                      nhead,
+                                                      seqlen_q,
+                                                      seqlen_k,
+                                                      hdim_q,
+                                                      hdim_v,
+                                                      scale,
+                                                      i_perm,
+                                                      o_perm);
+    // else
+    // {
+    //     std::cout << "not support hdim, will not run" << std::endl;
+    //     return -1;
+    // }
 
     std::size_t flop = std::size_t(2) * batch * nhead * seqlen_q * seqlen_k * hdim_q +
                        std::size_t(2) * batch * nhead * seqlen_q * hdim_v * seqlen_k;
