@@ -201,11 +201,13 @@ struct BlockFmhaPipelineQRKSVS
             {
                 static_for<0, k0_loops - 1, 1>{}([&](auto i_k0) {
                     constexpr auto k_lds_store_start = Sequence<(i_k0 + 0) % 2, 0, 0, 0>{};
+                    __builtin_amdgcn_s_barrier();
                     async_load_tile(get_slice_tile(k_lds_store,
                                                    k_lds_store_start,
                                                    k_lds_store_start + k_lds_store_slice_lengths),
                                     k_dram_window);
-                    move_tile_window(k_dram_window, {0, kK0});
+                    if constexpr (i_k0 < k0_loops - 1)
+                        move_tile_window(k_dram_window, {0, kK0});
                     async_load_fence(k_dram_window.GetNumAccess());
                     __builtin_amdgcn_s_barrier();
                     __builtin_amdgcn_sched_barrier(0);
@@ -330,7 +332,8 @@ struct BlockFmhaPipelineQRKSVS
                         store_tile(v_lds_window,
                                    tile_elementwise_in(v_element_func, v)); // store next v
                     }
-                    move_tile_window(v_dram_window, {0, kK1});
+                    if constexpr (i_k1 < k1_loops - 1)
+                        move_tile_window(v_dram_window, {0, kK1});
                 });
             }
             i_total_loops++;
