@@ -236,7 +236,7 @@ struct BlockFmhaPipelineQRKSVS
                                       Sequence<((k0_loops + 0) % 2) * kN0, 0>{},
                                       Sequence<((k0_loops + 0) % 2 + 1) * kN0, kK0>{}));
             }
-            __builtin_amdgcn_sched_barrier(0);
+            __builtin_amdgcn_sched_barrier(1);
 
             // STAGE 2, scale softmax
             tile_elementwise_inout([&scale](auto& x) { x = x * scale; }, s_acc);
