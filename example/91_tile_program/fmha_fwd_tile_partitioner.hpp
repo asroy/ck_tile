@@ -24,7 +24,8 @@ struct FmhaFwdTilePartitioner
                                             ck::index_t hdim_v_)
     {
         // TODO: this may need tuning
-        return dim3((seqlen_q_ / kM0) * (hdim_v_ / kN1), batch_size_, nhead_);
+        return dim3(
+            ((seqlen_q_ + kM0 - 1) / kM0) * ((hdim_v_ + kN1 - 1) / kN1), nhead_, batch_size_);
     }
 
     __device__ auto operator()(ck::index_t /*seqlen_q*/, ck::index_t hdim_v)
@@ -35,8 +36,8 @@ struct FmhaFwdTilePartitioner
         const index_t num_tile_n1 = hdim_v / kN1;
 
         const index_t i_block = blockIdx.x;
-        const index_t i_batch = blockIdx.y;
-        const index_t i_nhead = blockIdx.z;
+        const index_t i_nhead = blockIdx.y;
+        const index_t i_batch = blockIdx.z;
 
         const auto f = [](index_t dividend, index_t divisor) {
             index_t quotient = dividend / divisor;
