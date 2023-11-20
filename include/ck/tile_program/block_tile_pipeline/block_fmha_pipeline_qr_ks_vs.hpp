@@ -131,10 +131,8 @@ struct BlockFmhaPipelineQRKSVS
 
         __builtin_amdgcn_sched_barrier(0);
 
-        auto s_acc = decltype(gemm_0(
-            get_slice_tile(
-                tile_elementwise_in(q_element_func, q), Sequence<0, 0>{}, Sequence<kM0, kK0>{}),
-            get_slice_tile(k_lds_load, Sequence<0, 0>{}, Sequence<kN0, kK0>{}))){};
+        using SaccBlockTileType = decltype(gemm_0.MakeCBlockTile());
+        auto s_acc              = SaccBlockTileType{};
 
         // reduction function for softmax
         const auto f_max = [](auto e0, auto e1) { return max(e0, e1); };
@@ -144,15 +142,13 @@ struct BlockFmhaPipelineQRKSVS
         using SBlockTileType =
             decltype(tile_elementwise_in(type_convert<SMPLComputeDataType, SaccDataType>, s_acc));
 
-        using PBlockTileType =
-            decltype(tile_elementwise_in(type_convert<PDataType, SaccDataType>, s_acc));
+        // using PBlockTileType =
+        //     decltype(tile_elementwise_in(type_convert<PDataType, SaccDataType>, s_acc));
 
         using MLBlockTileType = decltype(block_tile_reduce<SMPLComputeDataType>(
             SBlockTileType{}, Sequence<1>{}, f_max, SMPLComputeDataType{0}));
 
-        using OaccBlockTileType = decltype(gemm_1(
-            get_slice_tile(PBlockTileType{}, Sequence<0, 0>{}, Sequence<kM0, kK1>{}),
-            v_lds_window));
+        using OaccBlockTileType = decltype(gemm_1.MakeCBlockTile());
 
         // init Oacc, M, L
         auto o_acc = OaccBlockTileType{};
@@ -196,9 +192,10 @@ struct BlockFmhaPipelineQRKSVS
             tile_elementwise_inout([](auto& c) { c = 0; }, s_acc); // Initialize C
 
             constexpr index_t k0_loops = kK0BlockLength / kK0;
-
+#if 0
             if constexpr(k0_loops > 1)
             {
+
                 static_for<0, k0_loops - 1, 1>{}([&](auto i_k0) {
                     constexpr auto k_lds_store_start = Sequence<(i_k0 + 0) % 2, 0, 0, 0>{};
                     __builtin_amdgcn_s_barrier();
@@ -218,10 +215,35 @@ struct BlockFmhaPipelineQRKSVS
                            get_slice_tile(k_lds_load,
                                           Sequence<((i_k0 + 1) % 2) * kN0, 0>{},
                                           Sequence<((i_k0 + 1) % 2 + 1) * kN0, kK0>{}));
-                    __builtin_amdgcn_sched_barrier(0);
+                    // __builtin_amdgcn_sched_barrier(0);
+                    __builtin_amdgcn_sched_barrier(0x7F);   // not acorss DS READ/WRITE
                 });
             }
+#else
+            if constexpr(k0_loops > 1)
+            {
+                static_for<0, k0_loops - 1, 1>{}([&](auto i_k0) {
+                    constexpr auto k_lds_store_start = Sequence<(i_k0 + 2) % 3, 0, 0, 0>{};
+                    async_load_tile(get_slice_tile(k_lds_store,
+                                                   k_lds_store_start,
+                                                   k_lds_store_start + k_lds_store_slice_lengths),
+                                    k_dram_window);
+                    if constexpr(i_k0 < k0_loops - 1)
+                        move_tile_window(k_dram_window, {0, kK0});
 
+                    async_load_fence(k_dram_window.GetNumAccess());
+                    __builtin_amdgcn_s_barrier();
+                    __builtin_amdgcn_sched_barrier(0);
+                    gemm_0(s_acc,
+                           get_slice_tile(q_tile,
+                                          Sequence<0, i_k0 * kK0>{},
+                                          Sequence<kM0, (i_k0 + 1) * kK0>{}),
+                           get_slice_tile(k_lds_load,
+                                          Sequence<((i_k0 + 1) % 3) * kN0, 0>{},
+                                          Sequence<((i_k0 + 1) % 3 + 1) * kN0, kK0>{}));
+                });
+            }
+#endif
             async_load_fence();
             __builtin_amdgcn_s_barrier();
 
@@ -232,9 +254,15 @@ struct BlockFmhaPipelineQRKSVS
                        get_slice_tile(q_tile,
                                       Sequence<0, (k0_loops - 1) * kK0>{},
                                       Sequence<kM0, k0_loops * kK0>{}),
+#if 0
                        get_slice_tile(k_lds_load,
                                       Sequence<((k0_loops + 0) % 2) * kN0, 0>{},
                                       Sequence<((k0_loops + 0) % 2 + 1) * kN0, kK0>{}));
+#else
+                       get_slice_tile(k_lds_load,
+                                      Sequence<((k0_loops + 0) % 3) * kN0, 0>{},
+                                      Sequence<((k0_loops + 0) % 3 + 1) * kN0, kK0>{}));
+#endif
             }
             __builtin_amdgcn_sched_barrier(1);
 
@@ -332,7 +360,7 @@ struct BlockFmhaPipelineQRKSVS
                         store_tile(v_lds_window,
                                    tile_elementwise_in(v_element_func, v)); // store next v
                     }
-                    if constexpr (i_k1 < k1_loops - 1)
+                    if constexpr(i_k1 < k1_loops - 1)
                         move_tile_window(v_dram_window, {0, kK1});
                 });
             }

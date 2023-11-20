@@ -15,6 +15,8 @@
 #include "ck/tile_program/block_tile_pipeline/block_gemm_pipeline_problem.hpp"
 #include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_v1.hpp"
 #include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_v1_custom_policy.hpp"
+#include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_v2.hpp"
+#include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_v2_custom_policy.hpp"
 #include "ck/tensor_operation/gpu/device/tensor_layout.hpp"
 
 namespace ck {
@@ -24,7 +26,7 @@ namespace block {
 // This pipeline is qkv all located in LDS
 struct BlockFmhaPipelineQRKSVSDefaultPolicy
 {
-    static constexpr index_t KLdsBuffers = 2;
+    static constexpr index_t KLdsBuffers = 3;
 
     template <typename Problem>
     __host__ __device__ static constexpr auto GetSmemKPackK()
@@ -44,7 +46,17 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
     template <typename Problem>
     __host__ __device__ static constexpr auto GetVectorloadV()
     {
-        return 4; // TODO: fix me
+        constexpr index_t kBlockSize = Problem::kBlockSize;
+        constexpr index_t kNPerBlock = Problem::BlockFmhaShape::kN1;
+        constexpr index_t kKPerBlock = Problem::BlockFmhaShape::kK1;
+
+        constexpr index_t total_pixels = kNPerBlock * kKPerBlock / kBlockSize;
+
+        // TODO: not correct!
+        if constexpr(total_pixels > 4)
+            return 4;
+        else
+            return 2;
     }
 
     template <typename Problem>
@@ -328,7 +340,7 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
                                            Tuple<Sequence<M0, M1, M2>, Sequence<K0, K1, K2>>,
                                            Tuple<Sequence<1>, Sequence<2, 1>>,
                                            Tuple<Sequence<1>, Sequence<1, 2>>,
-                                           Sequence<2, 1, 2>,
+                                           Sequence<1, 2, 2>,
                                            Sequence<0, 0, 2>>{});
     }
 
@@ -407,17 +419,35 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
             constexpr index_t kKPack = GetSmemKPackV<Problem>();
             static_assert(kKPack % K3 == 0);
             constexpr index_t K2 = kKPack / K3; // TODO: this dimention could be outside single wave
-            constexpr index_t K1 = get_warp_size() / (K2 * N0);
-            constexpr index_t K0 = kBlockSize / get_warp_size();
-            static_assert(kKPerBlock == K0 * K1 * K2 * K3);
-
-            return make_static_tile_distribution(
-                StaticTileDistributionEncoding<Sequence<1>,
-                                               Tuple<Sequence<N0, N1>, Sequence<K0, K1, K2, K3>>,
-                                               Tuple<Sequence<2>, Sequence<2, 1, 2>>,
-                                               Tuple<Sequence<0>, Sequence<1, 0, 2>>,
-                                               Sequence<2, 1>,
-                                               Sequence<3, 1>>{});
+            if constexpr(get_warp_size() % (K2 * N0) == 0)
+            {
+                constexpr index_t K1 = get_warp_size() / (K2 * N0);
+                constexpr index_t K0 = kBlockSize / get_warp_size();
+                static_assert(kKPerBlock == K0 * K1 * K2 * K3);
+                return make_static_tile_distribution(
+                    StaticTileDistributionEncoding<
+                        Sequence<1>,
+                        Tuple<Sequence<N0, N1>, Sequence<K0, K1, K2, K3>>,
+                        Tuple<Sequence<2>, Sequence<2, 1, 2>>,
+                        Tuple<Sequence<0>, Sequence<1, 0, 2>>,
+                        Sequence<2, 1>,
+                        Sequence<3, 1>>{});
+            }
+            else
+            {
+                constexpr index_t K1   = (K2 * N0) / get_warp_size();
+                constexpr index_t K2_m = K2 / K1;
+                constexpr index_t K0   = kBlockSize / get_warp_size() / K1;
+                static_assert(kKPerBlock == K0 * K1 * K2_m * K3);
+                return make_static_tile_distribution(
+                    StaticTileDistributionEncoding<
+                        Sequence<1>,
+                        Tuple<Sequence<N0, N1>, Sequence<K0, K1, K2_m, K3>>,
+                        Tuple<Sequence<2, 2>, Sequence<1, 2>>,
+                        Tuple<Sequence<0, 1>, Sequence<0, 2>>,
+                        Sequence<2, 1>,
+                        Sequence<3, 1>>{});
+            }
         }
         else
         {
@@ -455,16 +485,33 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
         constexpr index_t kKPack = GetSmemKPackV<Problem>();
         static_assert(kKPack % K3 == 0);
         constexpr index_t K2 = kKPack / K3; // TODO: this dimention could be outside single wave
-        constexpr index_t K1 = get_warp_size() / (K2 * N0);
-        constexpr index_t K0 = kBlockSize / get_warp_size();
+        if constexpr(get_warp_size() % (K2 * N0) == 0)
+        {
+            constexpr index_t K1 = get_warp_size() / (K2 * N0);
+            constexpr index_t K0 = kBlockSize / get_warp_size();
 
-        return make_static_tile_distribution(
-            StaticTileDistributionEncoding<Sequence<1>,
-                                           Tuple<Sequence<N0, N1>, Sequence<K0, K1, K2, K3>>,
-                                           Tuple<Sequence<2>, Sequence<2, 1, 2>>,
-                                           Tuple<Sequence<0>, Sequence<1, 0, 2>>,
-                                           Sequence<1, 2>,
-                                           Sequence<1, 3>>{});
+            return make_static_tile_distribution(
+                StaticTileDistributionEncoding<Sequence<1>,
+                                               Tuple<Sequence<N0, N1>, Sequence<K0, K1, K2, K3>>,
+                                               Tuple<Sequence<2>, Sequence<2, 1, 2>>,
+                                               Tuple<Sequence<0>, Sequence<1, 0, 2>>,
+                                               Sequence<1, 2>,
+                                               Sequence<1, 3>>{});
+        }
+        else
+        {
+            constexpr index_t K1   = (K2 * N0) / get_warp_size();
+            constexpr index_t K2_m = K2 / K1;
+            constexpr index_t K0   = kBlockSize / get_warp_size() / K1;
+            static_assert(kKPerBlock == K0 * K1 * K2_m * K3);
+            return make_static_tile_distribution(
+                StaticTileDistributionEncoding<Sequence<1>,
+                                               Tuple<Sequence<N0, N1>, Sequence<K0, K1, K2_m, K3>>,
+                                               Tuple<Sequence<2, 2>, Sequence<1, 2>>,
+                                               Tuple<Sequence<0, 1>, Sequence<0, 2>>,
+                                               Sequence<1, 2>,
+                                               Sequence<1, 3>>{});
+        }
     }
 
     template <typename Problem>
@@ -485,13 +532,13 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
                 2>>;
 
         using BlockGemmPolicy =
-            BlockGemmARegBSmemCRegV1CustomPolicy<typename Problem::QDataType,
+            BlockGemmARegBSmemCRegV2CustomPolicy<typename Problem::QDataType,
                                                  typename Problem::KDataType,
                                                  typename Problem::SaccDataType,
                                                  typename Problem::BlockFmhaShape::Gemm0BlockWarps,
                                                  WarpGemm>;
 
-        return BlockGemmARegBSmemCRegV1<BlockGemmProblem, BlockGemmPolicy>{};
+        return BlockGemmARegBSmemCRegV2<BlockGemmProblem, BlockGemmPolicy>{};
     }
 
     template <typename Problem>
@@ -515,12 +562,12 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
             Problem::BlockFmhaShape::Gemm1WarpTile::At(Number<2>{}),
             true>;
         using BlockGemmPolicy =
-            BlockGemmARegBSmemCRegV1CustomPolicy<typename Problem::PDataType,
+            BlockGemmARegBSmemCRegV2CustomPolicy<typename Problem::PDataType,
                                                  typename Problem::VDataType,
                                                  typename Problem::OaccDataType,
                                                  typename Problem::BlockFmhaShape::Gemm1BlockWarps,
                                                  WarpGemm>;
-        return BlockGemmARegBSmemCRegV1<BlockGemmProblem, BlockGemmPolicy>{};
+        return BlockGemmARegBSmemCRegV2<BlockGemmProblem, BlockGemmPolicy>{};
     }
 };
 
