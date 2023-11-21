@@ -16,10 +16,11 @@
 template <typename TilePartitioner_, typename FmhaPipeline_, typename EpiloguePipeline_>
 struct FmhaFwdKernel
 {
-    using TilePartitioner                   = ck::remove_cvref_t<TilePartitioner_>;
-    using FmhaPipeline                      = ck::remove_cvref_t<FmhaPipeline_>;
-    using EpiloguePipeline                  = ck::remove_cvref_t<EpiloguePipeline_>;
-    static constexpr ck::index_t kBlockSize = FmhaPipeline::kBlockSize;
+    using TilePartitioner                    = ck::remove_cvref_t<TilePartitioner_>;
+    using FmhaPipeline                       = ck::remove_cvref_t<FmhaPipeline_>;
+    using EpiloguePipeline                   = ck::remove_cvref_t<EpiloguePipeline_>;
+    static constexpr ck::index_t kBlockSize  = FmhaPipeline::kBlockSize;
+    static constexpr ck::index_t kBlockPerCu = FmhaPipeline::kBlockPerCu;
 
     using QDataType = ck::remove_cvref_t<typename FmhaPipeline::QDataType>;
     using KDataType = ck::remove_cvref_t<typename FmhaPipeline::KDataType>;

@@ -40,7 +40,8 @@ struct BlockFmhaPipelineQRKSVS
     using VLayout                    = remove_cvref_t<typename BlockFmhaShape::VLayout>;
     static constexpr bool kQLoadOnce = true; // if q load whole block length (hdim) at once
 
-    static constexpr index_t kBlockSize = Problem::kBlockSize;
+    static constexpr index_t kBlockPerCu = BlockFmhaShape::kBlockPerCu;
+    static constexpr index_t kBlockSize  = Problem::kBlockSize;
 
     static constexpr index_t kM0            = BlockFmhaShape::kM0;
     static constexpr index_t kN0            = BlockFmhaShape::kN0;
