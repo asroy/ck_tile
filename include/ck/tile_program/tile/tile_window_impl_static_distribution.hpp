@@ -317,8 +317,7 @@ struct TileWindowWithStaticDistribution
     __device__ constexpr auto GetNumAccess() const { return LoadStoreTraits::NumAccess; }
 
     template <bool use_inline_asm = false>
-    __device__ auto
-        Load(integral_constant<bool, use_inline_asm> = integral_constant<bool, false>{}) const
+    __device__ auto Load(bool_constant<use_inline_asm> = {}) const
     {
         using Traits = LoadStoreTraits;
 
@@ -345,7 +344,7 @@ struct TileWindowWithStaticDistribution
                 // read from bottom tensor
                 const vector_t vec_value =
                     GetBottomTensorView().template GetVectorizedElements<vector_t>(
-                        bottom_tensor_thread_coord, integral_constant<bool, use_inline_asm>{});
+                        bottom_tensor_thread_coord, bool_constant<use_inline_asm>{});
 
                 const vector_type_t vec{vec_value};
 
