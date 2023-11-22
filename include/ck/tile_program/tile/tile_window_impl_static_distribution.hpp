@@ -388,25 +388,27 @@ struct TileWindowWithStaticDistribution
         using LdsDataType = typename LdsTileWindow::DataType;
         // using LdsDescriptor = typename LdsTileWindow::BottomTensorDesc;
 
-        // bufs * issues * warps * lanes
-        static_assert(LdsTileWindow::GetNumOfDimension() ==
-                      4); // TODO: hard coded descriptor dimension
-        // constexpr auto & lds_desc = lds_tile.GetBottomTensorView().GetTensorDescriptor();
-        const index_t size_per_wave =
-            lds_tile.GetBottomTensorView().GetTensorDescriptor().CalculateOffset(
-                make_tuple(0, 0, 1, 0)) *
-            sizeof(LdsDataType);
+        // issues * warps * lanes
+        static_assert(LdsTileWindow::GetNumOfDimension() == 3); // TODO: hard coded
+
         const index_t size_per_buf =
             lds_tile.GetBottomTensorView().GetTensorDescriptor().CalculateOffset(
-                make_tuple(1, 0, 0, 0)) *
-            sizeof(LdsDataType);
-        const index_t size_per_issue =
-            lds_tile.GetBottomTensorView().GetTensorDescriptor().CalculateOffset(
-                make_tuple(0, 1, 0, 0)) *
+                make_tuple(Number<0>{}, Number<0>{}, Number<0>{})) *
             sizeof(LdsDataType);
 
-        index_t m0_init_value =
-            size_per_buf * lds_tile.GetWindowOrigin()(Number<0>{}) + size_per_wave * get_warp_id();
+        const index_t size_per_wave =
+            lds_tile.GetBottomTensorView().GetTensorDescriptor().CalculateOffset(
+                make_tuple(Number<0>{}, Number<1>{}, Number<0>{})) *
+                sizeof(LdsDataType) -
+            size_per_buf;
+
+        const index_t size_per_issue =
+            lds_tile.GetBottomTensorView().GetTensorDescriptor().CalculateOffset(
+                make_tuple(Number<1>{}, Number<0>{}, Number<0>{})) *
+                sizeof(LdsDataType) -
+            size_per_buf;
+
+        const index_t m0_init_value = size_per_buf + size_per_wave * get_warp_id();
         m0_set_with_memory(m0_init_value); // This should be wave independent
 
         using Traits = LoadStoreTraits;

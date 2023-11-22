@@ -87,21 +87,28 @@ struct BlockFmhaPipelineQRKSVS
                       "wrong!");
 
         // K tile in LDS
-        KDataType* k_lds_ptr  = static_cast<KDataType*>(static_cast<void*>(
-            static_cast<char*>(smem_ptr) + Policy::template GetSmemSizeQ<Problem>()));
-        auto k_lds_store_view = make_tensor_view<AddressSpaceEnum::Lds>(
-            k_lds_ptr, Policy::template MakeKLdsStoreBlockDescriptor<Problem>());
+        auto k_lds_ptr   = reinterpret_cast<KDataType*>(smem_ptr);
+        auto k_lds_store = generate_tuple(
+            [&](auto i_buf) {
+                return make_tile_window(
+                    make_tensor_view<AddressSpaceEnum::Lds>(
+                        k_lds_ptr, Policy::template MakeKLdsStoreBlockDescriptor<Problem>(i_buf)),
+                    Policy::template MakeKLdsStoreBlockDescriptor<Problem>(i_buf).GetLengths(),
+                    {0, 0, 0});
+            },
+            Number<Policy::KLdsBuffers>{});
 
-        auto k_lds_store =
-            make_tile_window(k_lds_store_view,
-                             Policy::template MakeKLdsStoreBlockDescriptor<Problem>().GetLengths(),
-                             {0, 0, 0, 0});
-        constexpr auto k_lds_store_slice_lengths = Sequence<
-            Number<1>{},
-            Policy::template MakeKLdsStoreBlockDescriptor<Problem>().GetLength(Number<1>{}),
-            Policy::template MakeKLdsStoreBlockDescriptor<Problem>().GetLength(Number<2>{}),
-            Policy::template MakeKLdsStoreBlockDescriptor<Problem>().GetLength(Number<3>{})>{};
-
+#if K_LDS_LOAD_USE_OFFSET_TRANSFORM
+        auto k_lds_load = generate_tuple(
+            [&](auto i_buf) {
+                return make_tile_window(
+                    make_tensor_view<AddressSpaceEnum::Lds>(
+                        k_lds_ptr, Policy::template MakeKLdsLoadBlockDescriptor<Problem>(i_buf)),
+                    Policy::template MakeKLdsLoadBlockDescriptor<Problem>(i_buf).GetLengths(),
+                    {0, 0});
+            },
+            Number<Policy::KLdsBuffers>{});
+#else
         auto k_lds_Load_view = make_tensor_view<AddressSpaceEnum::Lds>(
             k_lds_ptr, Policy::template MakeKLdsLoadBlockDescriptor<Problem>());
 
@@ -109,6 +116,7 @@ struct BlockFmhaPipelineQRKSVS
             make_tile_window(k_lds_Load_view,
                              Policy::template MakeKLdsLoadBlockDescriptor<Problem>().GetLengths(),
                              {0, 0});
+#endif
 
         // V tile in LDS
         auto v_lds = make_tensor_view<AddressSpaceEnum::Lds>(
@@ -176,10 +184,7 @@ struct BlockFmhaPipelineQRKSVS
             Policy::template MakeKDramTileDistribution<Problem>()); // K DRAM tile window for
                                                                     // load
         // prefetch K tile
-        async_load_tile(get_slice_tile(k_lds_store,
-                                       Sequence<1, 0, 0, 0>{},
-                                       Sequence<1, 0, 0, 0>{} + k_lds_store_slice_lengths),
-                        k_dram_window);
+        async_load_tile(k_lds_store(Number<1>{}), k_dram_window);
         move_tile_window(k_dram_window, {0, kK0});
         __builtin_amdgcn_sched_barrier(0);
 
@@ -204,6 +209,7 @@ struct BlockFmhaPipelineQRKSVS
                                                    k_lds_store_start,
                                                    k_lds_store_start + k_lds_store_slice_lengths),
                                     k_dram_window);
+                    async_load_tile(k_lds_store(Number<(i_k0 + 0) % 2>{}), k_dram_window);
                     if constexpr (i_k0 < k0_loops - 1)
                         move_tile_window(k_dram_window, {0, kK0});
                     async_load_fence(k_dram_window.GetNumAccess());
@@ -224,11 +230,13 @@ struct BlockFmhaPipelineQRKSVS
             if constexpr(k0_loops > 1)
             {
                 static_for<0, k0_loops - 1, 1>{}([&](auto i_k0) {
-                    constexpr auto k_lds_store_start = Sequence<(i_k0 + 2) % 3, 0, 0, 0>{};
-                    async_load_tile(get_slice_tile(k_lds_store,
-                                                   k_lds_store_start,
-                                                   k_lds_store_start + k_lds_store_slice_lengths),
-                                    k_dram_window);
+                    // constexpr auto k_lds_store_start = Sequence<(i_k0 + 2) % 3, 0, 0, 0>{};
+                    // async_load_tile(get_slice_tile(k_lds_store,
+                    //                                k_lds_store_start,
+                    //                                k_lds_store_start +
+                    //                                k_lds_store_slice_lengths),
+                    //                 k_dram_window);
+                    async_load_tile(k_lds_store(Number<(i_k0 + 2) % 3>{}), k_dram_window);
                     if constexpr(i_k0 < k0_loops - 1)
                         move_tile_window(k_dram_window, {0, kK0});
 
@@ -239,9 +247,14 @@ struct BlockFmhaPipelineQRKSVS
                            get_slice_tile(q_tile,
                                           Sequence<0, i_k0 * kK0>{},
                                           Sequence<kM0, (i_k0 + 1) * kK0>{}),
+#if K_LDS_LOAD_USE_OFFSET_TRANSFORM
+                           k_lds_load[Number<(i_k0 + 1) % 3>{}]);
+
+#else
                            get_slice_tile(k_lds_load,
                                           Sequence<((i_k0 + 1) % 3) * kN0, 0>{},
                                           Sequence<((i_k0 + 1) % 3 + 1) * kN0, kK0>{}));
+#endif
                 });
             }
 #endif
@@ -260,9 +273,14 @@ struct BlockFmhaPipelineQRKSVS
                                       Sequence<((k0_loops + 0) % 2) * kN0, 0>{},
                                       Sequence<((k0_loops + 0) % 2 + 1) * kN0, kK0>{}));
 #else
+#if K_LDS_LOAD_USE_OFFSET_TRANSFORM
+                       k_lds_load[Number<(k0_loops + 0) % 3>{}]);
+
+#else
                        get_slice_tile(k_lds_load,
                                       Sequence<((k0_loops + 0) % 3) * kN0, 0>{},
                                       Sequence<((k0_loops + 0) % 3 + 1) * kN0, kK0>{}));
+#endif
 #endif
             }
             __builtin_amdgcn_sched_barrier(1);
@@ -375,10 +393,12 @@ struct BlockFmhaPipelineQRKSVS
                                      k_dram_block_window.GetWindowLengths(),
                                      k_dram_block_window.GetWindowOrigin(),
                                      Policy::template MakeKDramTileDistribution<Problem>());
-                async_load_tile(get_slice_tile(k_lds_store,
-                                               Sequence<1, 0, 0, 0>{},
-                                               Sequence<1, 0, 0, 0>{} + k_lds_store_slice_lengths),
-                                k_dram_window);
+                // async_load_tile(get_slice_tile(k_lds_store,
+                //                                Sequence<1, 0, 0, 0>{},
+                //                                Sequence<1, 0, 0, 0>{} +
+                //                                k_lds_store_slice_lengths),
+                //                 k_dram_window);
+                async_load_tile(k_lds_store(Number<1>{}), k_dram_window);
                 move_tile_window(k_dram_window, {0, kK0});
             }
             // tail

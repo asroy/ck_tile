@@ -19,6 +19,9 @@
 #include "ck/tile_program/block_tile/block_gemm_areg_bsmem_creg_v2_custom_policy.hpp"
 #include "ck/tensor_operation/gpu/device/tensor_layout.hpp"
 
+// TODO: remove this
+#define K_LDS_LOAD_USE_OFFSET_TRANSFORM 0
+
 namespace ck {
 namespace tile_program {
 namespace block {
@@ -57,6 +60,30 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
             return 4;
         else
             return 2;
+    }
+
+    template <typename Problem>
+    __host__ __device__ static constexpr auto GetSingleSmemElementSpaceSize()
+    {
+        // this function assume K/V can share smem
+        constexpr index_t kNPerBlock = Problem::BlockFmhaShape::kN0;
+        constexpr index_t kKPerBlock = Problem::BlockFmhaShape::kK1;
+        constexpr index_t NumWarps   = Problem::BlockFmhaShape::NumWarps;
+        constexpr index_t warpSize   = ck::get_warp_size();
+
+        constexpr index_t KPack   = GetSmemKPackV<Problem>();  // this is for lds
+        constexpr index_t KVector = GetVectorloadK<Problem>(); // this is for global load
+        constexpr index_t kPad    = KPack;
+
+        static_assert(warpSize * KVector >= kKPerBlock && warpSize * KVector % kKPerBlock == 0);
+        constexpr index_t LanesPerK   = kKPerBlock / KVector;
+        constexpr index_t LaneGroups  = warpSize / LanesPerK;
+        constexpr index_t NumIssues   = kNPerBlock / (LaneGroups * NumWarps);
+        constexpr index_t SingleKSize = NumIssues * NumWarps * (warpSize * KVector + kPad);
+
+        constexpr index_t SingleVSize = MakeVLdsBlockDescriptor<Problem>().GetElementSpaceSize();
+
+        return math::max(SingleKSize, SingleVSize);
     }
 
     template <typename Problem>
@@ -123,8 +150,9 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
     }
 #endif
 
-    template <typename Problem>
-    __host__ __device__ static constexpr auto MakeKLdsStoreBlockDescriptor()
+    template <typename Problem, index_t IBuf = 0>
+    __host__ __device__ static constexpr auto
+        MakeKLdsStoreBlockDescriptor(Number<IBuf> = Number<0>{})
     {
         // K is always k-major, we use async-copy to load into LDS
         constexpr index_t kNPerBlock = Problem::BlockFmhaShape::kN0;
@@ -146,41 +174,85 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
             LanesPerK; // how many groups (within a wave), they may load different N, but same K
         constexpr index_t NumIssues = kNPerBlock / (LaneGroups * NumWarps);
         static_assert(NumIssues == kNPerBlock * kKPerBlock / (kBlockSize * KVector));
-        constexpr index_t SingleKSize = NumIssues * NumWarps * (warpSize * KVector + kPad);
-        constexpr index_t SingleVSize = MakeVLdsBlockDescriptor<Problem>().GetElementSpaceSize();
-        constexpr index_t BufferSize  = math::max(SingleKSize, SingleVSize);
 
-        constexpr auto k_lds_block_desc_0 =
-            make_naive_tensor_descriptor(make_tuple(Number<KLdsBuffers>{}, // buffers
-                                                    Number<NumIssues>{},   // n0
-                                                    Number<LaneGroups>{},  // n1
-                                                    Number<NumWarps>{},    // n2
-                                                    Number<LanesPerK>{},   // k0
-                                                    Number<KVector>{}),    // k1
-                                         make_tuple(Number<BufferSize>{},
-                                                    Number<NumWarps*(warpSize * KVector + kPad)>{},
-                                                    Number<kKPerBlock>{},
-                                                    Number<warpSize * KVector + kPad>{},
-                                                    Number<KVector>{},
-                                                    Number<1>{}),
-                                         Number<KVector>{},
-                                         Number<1>{});
+        constexpr auto k_lds_block_desc_0 = make_naive_tensor_descriptor_with_offset(
+            make_tuple(Number<NumIssues>{},  // n0
+                       Number<LaneGroups>{}, // n1
+                       Number<NumWarps>{},   // n2
+                       Number<LanesPerK>{},  // k0
+                       Number<KVector>{}),   // k1
+            make_tuple(Number<NumWarps*(warpSize * KVector + kPad)>{},
+                       Number<kKPerBlock>{},
+                       Number<warpSize * KVector + kPad>{},
+                       Number<KVector>{},
+                       Number<1>{}),
+            Number<IBuf * GetSingleSmemElementSpaceSize<Problem>()>{},
+            Number<KVector>{},
+            Number<1>{});
 
         // TODO this layout is hard coded, and will be used in async copy buffer view load
         // in LDS the real layout is (bufs, N0, N2, N1*K0*K1)
-        constexpr auto k_lds_block_desc_bufs_issues_warps_lanes = transform_tensor_descriptor(
+        constexpr auto k_lds_block_desc_issues_warps_lanes = transform_tensor_descriptor(
             k_lds_block_desc_0,
-            make_tuple(make_pass_through_transform(Number<KLdsBuffers>{}),
-                       make_pass_through_transform(Number<NumIssues>{}),
+            make_tuple(make_pass_through_transform(Number<NumIssues>{}),
                        make_pass_through_transform(Number<NumWarps>{}),
                        make_merge_transform(make_tuple(
                            Number<LaneGroups>{}, Number<LanesPerK>{}, Number<KVector>{}))),
-            make_tuple(Sequence<0>{}, Sequence<1>{}, Sequence<3>{}, Sequence<2, 4, 5>{}),
-            make_tuple(Sequence<0>{}, Sequence<1>{}, Sequence<2>{}, Sequence<3>{}));
+            make_tuple(Sequence<0>{}, Sequence<2>{}, Sequence<1, 3, 4>{}),
+            make_tuple(Sequence<0>{}, Sequence<1>{}, Sequence<2>{}));
 
-        return k_lds_block_desc_bufs_issues_warps_lanes;
+        return k_lds_block_desc_issues_warps_lanes;
     }
 
+#if K_LDS_LOAD_USE_OFFSET_TRANSFORM
+    template <typename Problem, index_t IBuf = 0>
+    __host__ __device__ static constexpr auto
+        MakeKLdsLoadBlockDescriptor(Number<IBuf> = Number<0>{})
+    {
+        // K is always k-major, we use async-copy to load into LDS
+        constexpr index_t kNPerBlock = Problem::BlockFmhaShape::kN0;
+        constexpr index_t kKPerBlock = Problem::BlockFmhaShape::kK1;
+        constexpr index_t kBlockSize = Problem::kBlockSize;
+        constexpr index_t NumWarps   = Problem::BlockFmhaShape::NumWarps;
+        constexpr index_t warpSize   = ck::get_warp_size();
+
+        constexpr index_t KPack   = GetSmemKPackV<Problem>();  // this is for lds
+        constexpr index_t KVector = GetVectorloadK<Problem>(); // this is for global load
+        constexpr index_t kPad    = KPack; // for async-copy, this pad is between warps
+
+        static_assert(warpSize * KVector >= kKPerBlock && warpSize * KVector % kKPerBlock == 0);
+        constexpr index_t LanesPerK  = kKPerBlock / KVector; // within a wave
+        constexpr index_t LaneGroups = warpSize / LanesPerK; // within a wave
+        constexpr index_t NumIssues  = kNPerBlock / (LaneGroups * NumWarps);
+        static_assert(NumIssues == kNPerBlock * kKPerBlock / (kBlockSize * KVector));
+
+        constexpr auto k_lds_block_desc_0 = make_naive_tensor_descriptor_with_offset(
+            make_tuple(Number<NumIssues>{},          // n0
+                       Number<NumWarps>{},           // n2
+                       Number<LaneGroups>{},         // n1
+                       Number<kKPerBlock / KPack>{}, // k0
+                       Number<KPack>{}),             // k1
+            make_tuple(Number<NumWarps*(warpSize * KVector + kPad)>{},
+                       Number<warpSize * KVector + kPad>{},
+                       Number<kKPerBlock>{},
+                       Number<KPack>{},
+                       Number<1>{}),
+            Number<IBuf * GetSingleSmemElementSpaceSize<Problem>()>{},
+            Number<KPack>{},
+            Number<1>{});
+
+        constexpr auto k_lds_block_desc = transform_tensor_descriptor(
+            k_lds_block_desc_0,
+            make_tuple(
+                make_merge_transform(
+                    make_tuple(Number<NumIssues>{}, Number<LaneGroups>{}, Number<NumWarps>{})),
+                make_merge_transform(make_tuple(Number<kKPerBlock / KPack>{}, Number<KPack>{}))),
+            make_tuple(Sequence<0, 2, 1>{}, Sequence<3, 4>{}),
+            make_tuple(Sequence<0>{}, Sequence<1>{}));
+
+        return k_lds_block_desc;
+    }
+#else
     template <typename Problem>
     __host__ __device__ static constexpr auto MakeKLdsLoadBlockDescriptor()
     {
@@ -233,6 +305,7 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
 
         return k_lds_block_desc;
     }
+#endif
 
     // 3d + padding
     template <typename Problem>
@@ -303,18 +376,11 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
     template <typename Problem>
     __host__ __device__ static constexpr ck::index_t GetSmemSize()
     {
-        static_assert(MakeKLdsLoadBlockDescriptor<Problem>().GetElementSpaceSize() ==
-                      MakeKLdsStoreBlockDescriptor<Problem>().GetElementSpaceSize());
-        constexpr index_t smem_size_gemm_0 =
-            GetSmemSizeQ<Problem>() +
-            sizeof(typename Problem::KDataType) *
-                MakeKLdsLoadBlockDescriptor<Problem>().GetElementSpaceSize();
-        constexpr index_t smem_size_gemm_1 =
-            MakeVLdsBlockDescriptor<Problem>().GetElementSpaceSize() *
-            sizeof(typename Problem::VDataType);
+        // TODO: assume Q is in register
+        constexpr index_t single_smem_size =
+            GetSingleSmemElementSpaceSize<Problem>() * sizeof(typename Problem::KDataType);
 
-        // TODO: consider shuffle requirement
-        return math::max(smem_size_gemm_0, smem_size_gemm_1);
+        return single_smem_size * KLdsBuffers;
     }
 
     template <typename Problem, typename BlockGemm>
