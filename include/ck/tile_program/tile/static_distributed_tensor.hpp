@@ -175,6 +175,7 @@ struct StaticDistributedTensor
         StaticBuffer<AddressSpaceEnum::Vgpr, DataType, kThreadElementSpaceSize, true> arr;
         vector_type<DataType, kThreadElementSpaceSize> vec{};
     } thread_buf_;
+    static_assert(sizeof(thread_buf_) == sizeof(DataType) * kThreadElementSpaceSize);
 };
 
 template <typename DataType, typename StaticTileDistribution>
