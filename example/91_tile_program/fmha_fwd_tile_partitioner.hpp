@@ -24,8 +24,10 @@ struct FmhaFwdTilePartitioner
                                             ck::index_t hdim_v_)
     {
         // TODO: this may need tuning
-        return dim3(
-            ((seqlen_q_ + kM0 - 1) / kM0) * ((hdim_v_ + kN1 - 1) / kN1), nhead_, batch_size_);
+        return dim3(ck::math::integer_divide_ceil(seqlen_q_, kM0) *
+                        ck::math::integer_divide_ceil(hdim_v_, kN1),
+                    nhead_,
+                    batch_size_);
     }
 
     __device__ auto operator()(ck::index_t /*seqlen_q*/, ck::index_t hdim_v)
