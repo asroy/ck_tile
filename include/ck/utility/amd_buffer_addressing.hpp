@@ -153,7 +153,7 @@ __device__ void buffer_load_fence(T& target, index_t cnt = 0)
 {
     asm volatile("s_waitcnt vmcnt(%0)" : : "n"(cnt) : "memory");
     auto& buf                  = target.GetThreadBuffer();
-    constexpr index_t buf_size = remove_cvref_t<decltype(buf)>::Size();
+    constexpr index_t buf_size = buf.Size();
     static_for<0, buf_size, 1>{}([&buf](auto i) { asm volatile("" : "+v"(buf(i)) : : "memory"); });
     // using type = typename remove_cvref_t<decltype(target.GetThreadBufferRaw())>::type;
     // asm volatile("" : "+X"(target.GetThreadBufferRaw().template AsType<type>()(Number<0>{})) : :
