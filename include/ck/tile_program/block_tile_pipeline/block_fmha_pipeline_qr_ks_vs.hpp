@@ -286,7 +286,9 @@ struct BlockFmhaPipelineQRKSVS
             __builtin_amdgcn_sched_barrier(1);
 
             // STAGE 2, scale softmax
+#if !CK_FMHA_FWD_FAST_EXP2
             tile_elementwise_inout([&scale](auto& x) { x = x * scale; }, s_acc);
+#endif
 
             const auto s =
                 tile_elementwise_in(type_convert<SMPLComputeDataType, SaccDataType>, s_acc); // S{j}
@@ -307,9 +309,16 @@ struct BlockFmhaPipelineQRKSVS
             constexpr auto p_spans = decltype(p_compute)::GetDistributedSpans();
             sweep_tile_span(p_spans[Number<0>{}], [&](auto idx0) {
                 constexpr auto i_idx = make_tuple(idx0);
+#if CK_FMHA_FWD_FAST_EXP2
+                auto row_max = scale * m[i_idx];
+#endif
                 sweep_tile_span(p_spans[Number<1>{}], [&](auto idx1) {
                     constexpr auto i_j_idx = make_tuple(idx0, idx1);
+#if CK_FMHA_FWD_FAST_EXP2
+                    p_compute(i_j_idx) = math::exp2(scale * s[i_j_idx] - row_max);
+#else
                     p_compute(i_j_idx)     = math::exp(s[i_j_idx] - m[i_idx]);
+#endif
                 });
             });
 
@@ -321,8 +330,13 @@ struct BlockFmhaPipelineQRKSVS
             constexpr auto o_spans = decltype(o_acc)::GetDistributedSpans();
             sweep_tile_span(o_spans[Number<0>{}], [&](auto idx0) {
                 constexpr auto i_idx = make_tuple(idx0);
+#if CK_FMHA_FWD_FAST_EXP2
+                auto row_max   = scale * m[i_idx];
+                const auto tmp = math::exp2(scale * m_old[i_idx] - row_max);
+#else
                 const auto tmp       = math::exp(m_old[i_idx] - m[i_idx]);
-                l(i_idx)             = tmp * l[i_idx] + rowsum_p[i_idx];
+#endif
+                l(i_idx) = tmp * l[i_idx] + rowsum_p[i_idx];
                 sweep_tile_span(o_spans[Number<1>{}], [&](auto idx1) {
                     constexpr auto i_j_idx = make_tuple(idx0, idx1);
                     // FIXME: this use different equation from FA v2 paper,
