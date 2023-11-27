@@ -32,6 +32,55 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
     static constexpr index_t KLdsBuffers = 3;
     static constexpr index_t VLdsBuffers = 3;
 
+    template <index_t k_bufs_, index_t v_bufs_, index_t k_loops_, index_t v_loops_>
+    struct LdsBufferSequence
+    {
+        static constexpr auto Make()
+        {
+            return transform_sequences(
+                [&](auto i) {
+                    if(i < k_loops_)
+                        return i % k_bufs_;
+                    return (i - k_loops_) % v_bufs_;
+                },
+                typename arithmetic_sequence_gen<0, k_loops_ + v_loops_, 1>::type{});
+        };
+
+        using type = remove_cvref_t<decltype(Make())>;
+    };
+    // clang-format off
+    template<> struct
+    LdsBufferSequence<3, 3, 4, 4> { using type = Sequence<1, 2, 0, 1,   0, 1, 2, 0>; };
+
+    template<> struct
+    LdsBufferSequence<3, 3, 4, 2> { using type = Sequence<1, 2, 0, 1,   2, 0>; };
+
+    template<> struct
+    LdsBufferSequence<3, 3, 2, 4> { using type = Sequence<1, 2,         0, 1, 2, 0>; };
+
+    template<> struct
+    LdsBufferSequence<3, 3, 3, 3> { using type = Sequence<1, 2, 0,      1, 2, 0>; };
+
+    template<> struct
+    LdsBufferSequence<3, 3, 2, 2> { using type = Sequence<1, 2,         1, 0>;};
+    // clang-format on
+
+    template <typename Problem>
+    __host__ __device__ static constexpr auto GetLdsBufferSequence()
+    {
+        using BlockFmhaShape = remove_cvref_t<typename Problem::BlockFmhaShape>;
+
+        constexpr index_t kN0            = BlockFmhaShape::kN0;
+        constexpr index_t kK0            = BlockFmhaShape::kK0;
+        constexpr index_t kK1            = BlockFmhaShape::kK1;
+        constexpr index_t kK0BlockLength = BlockFmhaShape::kK0BlockLength;
+
+        constexpr index_t k0_loops = kK0BlockLength / kK0;
+        constexpr index_t k1_loops = kN0 / kK1;
+
+        return typename LdsBufferSequence<KLdsBuffers, VLdsBuffers, k0_loops, k1_loops>::type{};
+    }
+
     template <typename Problem>
     __host__ __device__ static constexpr auto GetSmemKPackK()
     {
