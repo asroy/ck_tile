@@ -987,6 +987,73 @@ struct Freeze : public BaseTransform<1, 0>
     }
 };
 
+// Insert a dangling upper dimension without lower dimension
+template <typename UpperLength>
+struct Insert : public BaseTransform<0, 1>
+{
+    using UpLengths = decltype(make_tuple(UpperLength{}));
+
+    UpLengths up_lengths_;
+
+    __host__ __device__ constexpr Insert() = default;
+
+    __host__ __device__ constexpr Insert(const UpperLength& up_length)
+        : up_lengths_{make_tuple(up_length)}
+    {
+    }
+
+    __host__ __device__ static constexpr index_t GetNumOfLowerDimension() { return 0; }
+
+    __host__ __device__ static constexpr index_t GetNumOfUpperDimension() { return 1; }
+
+    __host__ __device__ constexpr auto GetUpperLengths() const { return up_lengths_; }
+
+    template <typename LowIdx, typename UpIdx>
+    __host__ __device__ constexpr void CalculateLowerIndex(LowIdx&, const UpIdx&) const
+    {
+        static_assert(LowIdx::Size() == 0 && UpIdx::Size() == 1,
+                      "wrong! inconsistent # of dimension");
+    }
+
+    template <typename LowIdxDiff, typename UpIdxDiff, typename LowIdx, typename UpIdx>
+    __host__ __device__ static void
+    UpdateLowerIndex(LowIdxDiff&, const UpIdxDiff&, LowIdx&, const UpIdx&)
+    {
+        static_assert(LowIdxDiff::Size() == 0 && UpIdxDiff::Size() == 1 && LowIdx::Size() == 0 &&
+                          UpIdx::Size() == 1,
+                      "wrong! inconsistent # of dimension");
+    }
+
+    __host__ __device__ static constexpr bool IsLinearTransform() { return true; }
+
+    __host__ __device__ static constexpr bool IsValidUpperIndexAlwaysMappedToValidLowerIndex()
+    {
+        return true;
+    }
+
+    template <typename UpIdx>
+    __host__ __device__ static constexpr bool
+    IsValidUpperIndexMappedToValidLowerIndex(const UpIdx& /* idx_up */)
+    {
+        return true;
+    }
+
+    __host__ __device__ static constexpr bool IsKnownAtCompileTime()
+    {
+        return is_known_at_compile_time<UpperLength>::value;
+    }
+
+    __host__ __device__ void Print() const
+    {
+        printf("Insert{");
+
+        //
+        print(up_lengths_);
+
+        printf("}");
+    }
+};
+
 // Replicate the original tensor and create a higher dimensional tensor
 template <typename UpLengths>
 struct Replicate : public BaseTransform<0, UpLengths::Size()>
