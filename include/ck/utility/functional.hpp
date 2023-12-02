@@ -139,4 +139,27 @@ struct identity
     }
 };
 
+template <typename Function, typename FirstArg>
+struct front_binder
+{
+    static_assert(!std::is_reference_v<Function> && !std::is_reference_v<FirstArg>);
+
+    template <typename... Args>
+    decltype(auto) operator()(Args&&... args) const
+    {
+        return std::invoke(function, first_arg, std::forward<Args>(args)...);
+    }
+
+    Function function;
+    FirstArg& first_arg;
+};
+
+// like std::bind_front(), but keep reference to the first argument
+template <typename Function, typename FirstArg>
+auto bind_front(Function&& function, FirstArg&& first_arg)
+{
+    return front_binder<std::remove_reference_t<Function>, std::remove_reference_t<FirstArg>>{
+        std::forward<Function>(function), first_arg};
+}
+
 } // namespace ck
