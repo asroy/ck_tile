@@ -3,116 +3,111 @@
 
 #pragma once
 
-#include <array>
-#include <cstddef>
-#include <functional>
-#include <tuple>
 #include <type_traits>
 
+#include "ck/ck.hpp"
+#include "ck/utility/array.hpp"
 #include "ck/utility/functional.hpp"
+#include "ck/utility/number.hpp"
 #include "ck/utility/remove_cvref.hpp"
+#include "ck/utility/tuple.hpp"
 
 namespace ck {
 namespace detail {
-// helper of runtime version of std::get() for non-const std::tuple<>
-template <typename... Ts, typename Function, std::size_t Index>
-void runtime_get_impl(std::size_t target_index,
-                      std::tuple<Ts...>& tuple,
-                      Function&& function,
-                      std::integral_constant<std::size_t, Index>)
+// helper of runtime version of At() for non-const Tuple<>
+template <typename... Ts, typename Function, index_t Index>
+__host__ __device__ void
+runtime_get_impl(index_t target_index, Tuple<Ts...>& tuple, Function&& function, Number<Index>)
 {
     static_assert(Index < sizeof...(Ts));
 
     if(target_index == Index)
     {
-        std::invoke(function, std::get<Index>(tuple));
+        function(tuple.template At<Index>());
     }
     else
     {
         if constexpr(Index + 1 < sizeof...(Ts))
         {
-            runtime_get_impl(
-                target_index, tuple, function, std::integral_constant<std::size_t, Index + 1>{});
+            runtime_get_impl(target_index, tuple, function, Number<Index + 1>{});
         }
     }
 }
 
-// helper of runtime version of std::get() for const std::tuple<>
-template <typename... Ts, typename Function, std::size_t Index>
-void runtime_get_impl(std::size_t target_index,
-                      const std::tuple<Ts...>& tuple,
-                      Function&& function,
-                      std::integral_constant<std::size_t, Index>)
+// helper of runtime version of At() for const Tuple<>
+template <typename... Ts, typename Function, index_t Index>
+__host__ __device__ void runtime_get_impl(index_t target_index,
+                                          const Tuple<Ts...>& tuple,
+                                          Function&& function,
+                                          Number<Index>)
 {
     static_assert(Index < sizeof...(Ts));
 
     if(target_index == Index)
     {
-        std::invoke(function, std::get<Index>(tuple));
+        std::invoke(function, tuple.template At<Index>());
     }
     else
     {
         if constexpr(Index + 1 < sizeof...(Ts))
         {
-            runtime_get_impl(
-                target_index, tuple, function, std::integral_constant<std::size_t, Index + 1>{});
+            runtime_get_impl(target_index, tuple, function, Number<Index + 1>{});
         }
     }
 }
 } // namespace detail
 
-// runtime version of std::get() for non-const std::tuple<>
+// runtime version of At() for non-const Tuple<>
 template <typename... Ts, typename Function>
-void runtime_get(std::size_t index, std::tuple<Ts...>& tuple, Function&& function)
+__host__ __device__ void runtime_get(index_t index, Tuple<Ts...>& tuple, Function&& function)
 {
     static_assert(std::conjunction_v<std::is_invocable<Function, Ts>...>);
 
-    assert(index < sizeof...(Ts));
-    detail::runtime_get_impl(index, tuple, function, std::integral_constant<std::size_t, 0>{});
+    assert(index < static_cast<index_t>(sizeof...(Ts)));
+    detail::runtime_get_impl(index, tuple, function, Number<0>{});
 }
 
-// runtime version of std::get() for const std::tuple<>
+// runtime version of At() for const Tuple<>
 template <typename... Ts, typename Function>
-void runtime_get(std::size_t index, const std::tuple<Ts...>& tuple, Function&& function)
+__host__ __device__ void runtime_get(index_t index, const Tuple<Ts...>& tuple, Function&& function)
 {
     static_assert(std::conjunction_v<std::is_invocable<Function, Ts>...>);
 
-    assert(index < sizeof...(Ts));
-    detail::runtime_get_impl(index, tuple, function, std::integral_constant<std::size_t, 0>{});
+    assert(index < static_cast<index_t>(sizeof...(Ts)));
+    detail::runtime_get_impl(index, tuple, function, Number<0>{});
 }
 
 namespace detail {
-// helper of runtime_get() for nested std::tuple<>
-template <typename Tuples, typename Function, std::size_t TupleIndex>
-void runtime_get_impl(
-    const std::array<std::size_t, std::tuple_size_v<remove_cvref_t<Tuples>>>& indices,
-    Tuples&& tuples,
-    Function&& function,
-    std::integral_constant<std::size_t, TupleIndex>)
+// helper of runtime_get() for nested Tuple<>
+template <typename Tuples, typename Function, index_t TupleIndex>
+__host__ __device__ void
+runtime_get_impl(const Array<index_t, remove_cvref_t<Tuples>::Size()>& indices,
+                 Tuples&& tuples,
+                 Function&& function,
+                 Number<TupleIndex>)
 {
-    if constexpr(TupleIndex == std::tuple_size_v<remove_cvref_t<Tuples>>)
+    if constexpr(TupleIndex == remove_cvref_t<Tuples>::Size())
     {
-        std::invoke(function);
+        function();
     }
     else
     {
-        runtime_get(std::get<TupleIndex>(indices), std::get<TupleIndex>(tuples), [&](auto&& arg) {
-            runtime_get_impl(indices,
-                             tuples,
-                             bind_front(std::ref(function), arg),
-                             std::integral_constant<std::size_t, TupleIndex + 1>{});
-        });
+        runtime_get(
+            indices.template At<TupleIndex>(), tuples.template At<TupleIndex>(), [&](auto&& arg) {
+                runtime_get_impl(
+                    indices, tuples, bind_front(std::ref(function), arg), Number<TupleIndex + 1>{});
+            });
     }
 }
 } // namespace detail
 
-// runtime_get() for nested std::tuple<>
+// runtime_get() for nested Tuple<>
 template <typename Tuples, typename Function>
-void runtime_get(const std::array<std::size_t, std::tuple_size_v<remove_cvref_t<Tuples>>>& indices,
-                 Tuples&& tuples,
-                 Function&& function)
+__host__ __device__ void runtime_get(const Array<index_t, remove_cvref_t<Tuples>::Size()>& indices,
+                                     Tuples&& tuples,
+                                     Function&& function)
 {
-    detail::runtime_get_impl(indices, tuples, function, std::integral_constant<std::size_t, 0>{});
+    detail::runtime_get_impl(indices, tuples, function, Number<0>{});
 }
 
 } // namespace ck
