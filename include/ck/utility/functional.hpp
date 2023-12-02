@@ -146,9 +146,10 @@ struct front_binder
     static_assert(!std::is_reference_v<Function> && !std::is_reference_v<FirstArg>);
 
     template <typename... Args>
-    decltype(auto) operator()(Args&&... args) const
+    __host__ __device__ constexpr decltype(auto) operator()(Args&&... args) const
     {
-        return std::invoke(function, first_arg, std::forward<Args>(args)...);
+        /// TODO: use std::invoke() like function to support more callable types
+        return function(first_arg, std::forward<Args>(args)...);
     }
 
     mutable Function function;

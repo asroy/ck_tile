@@ -23,6 +23,7 @@ runtime_get_impl(index_t target_index, Tuple<Ts...>& tuple, Function&& function,
 
     if(target_index == Index)
     {
+        /// TODO: use std::invoke() like function to support more callable types
         function(tuple.template At<Index>());
     }
     else
@@ -45,7 +46,8 @@ __host__ __device__ constexpr void runtime_get_impl(index_t target_index,
 
     if(target_index == Index)
     {
-        std::invoke(function, tuple.template At<Index>());
+        /// TODO: use std::invoke() like function to support more callable types
+        function(tuple.template At<Index>());
     }
     else
     {
@@ -90,6 +92,7 @@ runtime_get_impl(const Array<index_t, remove_cvref_t<Tuples>::Size()>& indices,
 {
     if constexpr(TupleIndex == remove_cvref_t<Tuples>::Size())
     {
+        /// TODO: use std::invoke() like function to support more callable types
         function();
     }
     else
