@@ -150,7 +150,7 @@ struct front_binder
         return std::invoke(function, first_arg, std::forward<Args>(args)...);
     }
 
-    Function function;
+    mutable Function function;
     FirstArg& first_arg;
 };
 
