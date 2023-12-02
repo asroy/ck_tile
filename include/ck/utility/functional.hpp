@@ -139,6 +139,7 @@ struct identity
     }
 };
 
+namespace detail {
 template <typename Function, typename FirstArg>
 struct front_binder
 {
@@ -153,13 +154,15 @@ struct front_binder
     mutable Function function;
     FirstArg& first_arg;
 };
+} // namespace detail
 
 // like std::bind_front(), but keep reference to the first argument
 template <typename Function, typename FirstArg>
 auto bind_front(Function&& function, FirstArg&& first_arg)
 {
-    return front_binder<std::remove_reference_t<Function>, std::remove_reference_t<FirstArg>>{
-        std::forward<Function>(function), first_arg};
+    return detail::front_binder<std::remove_reference_t<Function>,
+                                std::remove_reference_t<FirstArg>>{std::forward<Function>(function),
+                                                                   first_arg};
 }
 
 } // namespace ck
