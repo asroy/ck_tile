@@ -30,6 +30,7 @@
 #include "ck/utility/math_v2.hpp"
 #include "ck/utility/math_ext.hpp"
 #include "ck/utility/number.hpp"
+#include "ck/utility/runtime_get.hpp"
 #include "ck/utility/tuple_of_sequence_to_array_of_array.hpp"
 #include "ck/utility/macro_func_array_to_sequence.hpp"
 #include "ck/utility/macro_func_array_of_array_to_tuple_of_sequence.hpp"
