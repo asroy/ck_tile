@@ -92,7 +92,6 @@ runtime_get_impl(const Array<index_t, remove_cvref_t<Tuples>::Size()>& indices,
 {
     if constexpr(TupleIndex == remove_cvref_t<Tuples>::Size())
     {
-        /// TODO: use std::invoke() like function to support more callable types
         function();
     }
     else
