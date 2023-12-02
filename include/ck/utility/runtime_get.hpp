@@ -16,7 +16,7 @@ namespace ck {
 namespace detail {
 // helper of runtime version of At() for non-const Tuple<>
 template <typename... Ts, typename Function, index_t Index>
-__host__ __device__ void
+__host__ __device__ constexpr void
 runtime_get_impl(index_t target_index, Tuple<Ts...>& tuple, Function&& function, Number<Index>)
 {
     static_assert(Index < sizeof...(Ts));
@@ -36,10 +36,10 @@ runtime_get_impl(index_t target_index, Tuple<Ts...>& tuple, Function&& function,
 
 // helper of runtime version of At() for const Tuple<>
 template <typename... Ts, typename Function, index_t Index>
-__host__ __device__ void runtime_get_impl(index_t target_index,
-                                          const Tuple<Ts...>& tuple,
-                                          Function&& function,
-                                          Number<Index>)
+__host__ __device__ constexpr void runtime_get_impl(index_t target_index,
+                                                    const Tuple<Ts...>& tuple,
+                                                    Function&& function,
+                                                    Number<Index>)
 {
     static_assert(Index < sizeof...(Ts));
 
@@ -59,7 +59,8 @@ __host__ __device__ void runtime_get_impl(index_t target_index,
 
 // runtime version of At() for non-const Tuple<>
 template <typename... Ts, typename Function>
-__host__ __device__ void runtime_get(index_t index, Tuple<Ts...>& tuple, Function&& function)
+__host__ __device__ constexpr void
+runtime_get(index_t index, Tuple<Ts...>& tuple, Function&& function)
 {
     static_assert(std::conjunction_v<std::is_invocable<Function, Ts>...>);
 
@@ -69,7 +70,8 @@ __host__ __device__ void runtime_get(index_t index, Tuple<Ts...>& tuple, Functio
 
 // runtime version of At() for const Tuple<>
 template <typename... Ts, typename Function>
-__host__ __device__ void runtime_get(index_t index, const Tuple<Ts...>& tuple, Function&& function)
+__host__ __device__ constexpr void
+runtime_get(index_t index, const Tuple<Ts...>& tuple, Function&& function)
 {
     static_assert(std::conjunction_v<std::is_invocable<Function, Ts>...>);
 
@@ -80,7 +82,7 @@ __host__ __device__ void runtime_get(index_t index, const Tuple<Ts...>& tuple, F
 namespace detail {
 // helper of runtime_get() for nested Tuple<>
 template <typename Tuples, typename Function, index_t TupleIndex>
-__host__ __device__ void
+__host__ __device__ constexpr void
 runtime_get_impl(const Array<index_t, remove_cvref_t<Tuples>::Size()>& indices,
                  Tuples&& tuples,
                  Function&& function,
@@ -103,9 +105,10 @@ runtime_get_impl(const Array<index_t, remove_cvref_t<Tuples>::Size()>& indices,
 
 // runtime_get() for nested Tuple<>
 template <typename Tuples, typename Function>
-__host__ __device__ void runtime_get(const Array<index_t, remove_cvref_t<Tuples>::Size()>& indices,
-                                     Tuples&& tuples,
-                                     Function&& function)
+__host__ __device__ constexpr void
+runtime_get(const Array<index_t, remove_cvref_t<Tuples>::Size()>& indices,
+            Tuples&& tuples,
+            Function&& function)
 {
     detail::runtime_get_impl(indices, tuples, function, Number<0>{});
 }
