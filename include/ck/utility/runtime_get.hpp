@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <functional>
 #include <tuple>
@@ -84,7 +85,7 @@ namespace detail {
 // helper of runtime_get() for nested std::tuple<>
 template <typename Tuples, typename Function, std::size_t TupleIndex>
 void runtime_get_impl(
-    const std::array<std::size_t, std::tuple_size_v<remove_cvref_t<Tuples>>>& tuple_indices,
+    const std::array<std::size_t, std::tuple_size_v<remove_cvref_t<Tuples>>>& indices,
     Tuples&& tuples,
     Function&& function,
     std::integral_constant<std::size_t, TupleIndex>)
@@ -95,26 +96,23 @@ void runtime_get_impl(
     }
     else
     {
-        runtime_get(
-            std::get<TupleIndex>(tuple_indices), std::get<TupleIndex>(tuples), [&](auto&& arg) {
-                runtime_get_impl(tuple_indices,
-                                 tuples,
-                                 bind_front(std::ref(function), arg),
-                                 std::integral_constant<std::size_t, TupleIndex + 1>{});
-            });
+        runtime_get(std::get<TupleIndex>(indices), std::get<TupleIndex>(tuples), [&](auto&& arg) {
+            runtime_get_impl(indices,
+                             tuples,
+                             bind_front(std::ref(function), arg),
+                             std::integral_constant<std::size_t, TupleIndex + 1>{});
+        });
     }
 }
 } // namespace detail
 
 // runtime_get() for nested std::tuple<>
 template <typename Tuples, typename Function>
-void runtime_get(
-    const std::array<std::size_t, std::tuple_size_v<remove_cvref_t<Tuples>>>& tuple_indices,
-    Tuples&& tuples,
-    Function&& function)
+void runtime_get(const std::array<std::size_t, std::tuple_size_v<remove_cvref_t<Tuples>>>& indices,
+                 Tuples&& tuples,
+                 Function&& function)
 {
-    detail::runtime_get_impl(
-        tuple_indices, tuples, function, std::integral_constant<std::size_t, 0>{});
+    detail::runtime_get_impl(indices, tuples, function, std::integral_constant<std::size_t, 0>{});
 }
 
 } // namespace ck
