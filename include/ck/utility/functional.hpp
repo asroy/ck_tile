@@ -159,7 +159,7 @@ struct front_binder
 
 // like std::bind_front(), but keep reference to the first argument
 template <typename Function, typename FirstArg>
-auto bind_front(Function&& function, FirstArg&& first_arg)
+auto bind_front_ref(Function&& function, FirstArg& first_arg)
 {
     return detail::front_binder<std::remove_reference_t<Function>,
                                 std::remove_reference_t<FirstArg>>{std::forward<Function>(function),

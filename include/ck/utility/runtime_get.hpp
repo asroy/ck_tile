@@ -98,8 +98,10 @@ runtime_get_impl(const Array<index_t, remove_cvref_t<Tuples>::Size()>& indices,
     {
         runtime_get(
             indices.template At<TupleIndex>(), tuples.template At<TupleIndex>(), [&](auto&& arg) {
-                runtime_get_impl(
-                    indices, tuples, bind_front(std::ref(function), arg), Number<TupleIndex + 1>{});
+                runtime_get_impl(indices,
+                                 tuples,
+                                 bind_front_ref(std::ref(function), arg),
+                                 Number<TupleIndex + 1>{});
             });
     }
 }
