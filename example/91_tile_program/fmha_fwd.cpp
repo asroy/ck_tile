@@ -580,7 +580,7 @@ int main(int argc, char* argv[])
     float ave_time = 0;
     // clang-format off
     if(!ck::select_arg([&] { return options.hdim_q == options.hdim_v && options.hdim_q == 64; },  FKTCarrier<FmhaKernelHDim64>{},
-                       [&] { return options.hdim_q == options.hdim_v && options.hdim_q == 128; }, FKTCarrier<FmhaKernelHDim128>{},
+                       [&] { return options.hdim_q == options.hdim_v && options.hdim_q == 128; }, FKTCarrier<FmhaKernelHDim128>{},                       
                        [&](auto carrier) {
                            const auto invoker =
                                get_fmha_kernel_invoker<decltype(carrier)::template Kernel>(
@@ -605,7 +605,7 @@ int main(int argc, char* argv[])
                                               options.o_perm,
                                               options.use_bias);
                        },
-                       [] { std::cerr << "not support hdim, will not run" << std::endl; }))
+                       [&] { std::cerr << "hdim (hdim_q=" << options.hdim_q << ", hdim_v=" << options.hdim_v << ") is not supported, will not run" << std::endl; }))
     {
         return EXIT_FAILURE;
     }
