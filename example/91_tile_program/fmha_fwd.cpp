@@ -28,6 +28,7 @@
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_problem.hpp"
 #include "ck/tile_program/block_tile/block_masking_specialization.hpp"
 #include "ck/tile_program/tile/tile_fmha_shape.hpp"
+#include "ck/tile_program/tile/tile_fmha_traits.hpp"
 
 #include "reference_batched_elementwise.hpp"
 #include "reference_batched_gemm.hpp"
@@ -74,12 +75,14 @@ using FmhaShapeHDim128     = ck::tile_program::TileFmhaShape<FmhaBlockTileHdim12
 // using FmhaMask = ck::tile_program::block::MaskUpperTriangleFromBottomRightPredicate;
 using FmhaMask = ck::tile_program::block::MaskDisabledPredicate;
 
-using FmhaTilePartitionerHDim64  = FmhaFwdTilePartitioner<FmhaShapeHDim64>;
-using FmhaTilePartitionerHDim128 = FmhaFwdTilePartitioner<FmhaShapeHDim128>;
-
 inline constexpr bool kM0NeedPadding   = true;
 inline constexpr bool kN0K1NeedPadding = true;
 inline constexpr bool kSupportsBias    = true;
+using FmhaTraits =
+    ck::tile_program::TileFmhaTraits<kM0NeedPadding, kN0K1NeedPadding, kSupportsBias>;
+
+using FmhaTilePartitionerHDim64  = FmhaFwdTilePartitioner<FmhaShapeHDim64>;
+using FmhaTilePartitionerHDim128 = FmhaFwdTilePartitioner<FmhaShapeHDim128>;
 
 template <bool kIsGroupMode>
 using FmhaPipelineProblemHDim64 =
@@ -95,10 +98,8 @@ using FmhaPipelineProblemHDim64 =
                                                       256, // BlockSize
                                                       FmhaShapeHDim64,
                                                       kIsGroupMode,
-                                                      kM0NeedPadding,
-                                                      kN0K1NeedPadding,
-                                                      kSupportsBias,
-                                                      FmhaMask>;
+                                                      FmhaMask,
+                                                      FmhaTraits>;
 template <bool kIsGroupMode>
 using FmhaPipelineProblemHDim128 =
     ck::tile_program::block::BlockFmhaPipelineProblem<QDataType,
@@ -113,10 +114,8 @@ using FmhaPipelineProblemHDim128 =
                                                       256, // BlockSize
                                                       FmhaShapeHDim128,
                                                       kIsGroupMode,
-                                                      kM0NeedPadding,
-                                                      kN0K1NeedPadding,
-                                                      kSupportsBias,
-                                                      FmhaMask>;
+                                                      FmhaMask,
+                                                      FmhaTraits>;
 
 // using FmhaPipeline        = ck::tile_program::block::BlockFmhaPipelineQKVS<FmhaPipelineProblem>;
 template <bool kIsGroupMode>
