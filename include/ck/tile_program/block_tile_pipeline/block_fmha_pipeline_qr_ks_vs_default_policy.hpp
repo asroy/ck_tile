@@ -24,12 +24,17 @@ namespace block {
 // This pipeline is qkv all located in LDS
 struct BlockFmhaPipelineQRKSVSDefaultPolicy
 {
+    static constexpr index_t kMaxNumBytesPerLoad = 16;
+
     template <typename Problem>
     __host__ __device__ static constexpr auto GetSmemKPackK()
     {
         // TODO: this is for 3d layout
         using KDataType = remove_cvref_t<typename Problem::KDataType>;
-        return 16 / sizeof(KDataType);
+        static_assert(
+            kMaxNumBytesPerLoad % (Problem::kKSmemLoadScalarPerVector * sizeof(KDataType)) == 0);
+
+        return Problem::kKSmemLoadScalarPerVector;
     }
 
     template <typename Problem>
@@ -37,7 +42,10 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
     {
         // TODO: this is for 3d layout
         using VDataType = remove_cvref_t<typename Problem::VDataType>;
-        return 16 / sizeof(VDataType);
+        static_assert(
+            kMaxNumBytesPerLoad % (Problem::kVSmemLoadScalarPerVector * sizeof(VDataType)) == 0);
+
+        return Problem::kVSmemLoadScalarPerVector;
     }
 
     template <typename Problem>
@@ -214,13 +222,15 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
     __host__ __device__ static constexpr auto MakeKDramTileDistribution()
     {
         using KDataType = remove_cvref_t<typename Problem::KDataType>;
+        static_assert(
+            kMaxNumBytesPerLoad % (Problem::kKDramLoadScalarPerVector * sizeof(KDataType)) == 0);
 
         constexpr index_t kBlockSize = Problem::kBlockSize;
 
         constexpr index_t kNPerBlock = Problem::BlockFmhaShape::kN0;
         constexpr index_t kKPerBlock = Problem::BlockFmhaShape::kK0;
 
-        constexpr index_t K1 = 16 / sizeof(KDataType);
+        constexpr index_t K1 = Problem::kKDramLoadScalarPerVector;
         constexpr index_t K0 = kKPerBlock / K1;
         constexpr index_t N2 = get_warp_size() / K0;
 #if 1 // coalesce reading for each blocks
@@ -283,7 +293,11 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
         }
         else
         {
-            constexpr index_t K1 = 16 / sizeof(VDataType);
+            static_assert(kMaxNumBytesPerLoad %
+                              (Problem::kVDramLoadScalarPerVector * sizeof(VDataType)) ==
+                          0);
+
+            constexpr index_t K1 = Problem::kVDramLoadScalarPerVector;
             constexpr index_t K0 = kKPerBlock / K1;
             constexpr index_t N2 = get_warp_size() / K0;
             constexpr index_t N1 = kBlockSize / get_warp_size();
