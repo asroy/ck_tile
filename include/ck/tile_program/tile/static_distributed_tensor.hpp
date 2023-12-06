@@ -178,9 +178,9 @@ __host__ __device__ constexpr auto make_static_distributed_tensor(const StaticTi
 
 template <typename DataType, typename StaticTileDistribution, typename XIndicesPredicate>
 __host__ __device__ void
-set_value_if(StaticDistributedTensor<DataType, StaticTileDistribution>& out_tensor,
-             DataType value,
-             XIndicesPredicate predicate)
+set_tile_if(StaticDistributedTensor<DataType, StaticTileDistribution>& out_tensor,
+            DataType value,
+            XIndicesPredicate predicate)
 {
 
     StaticTileDistribution tile_distribution;
