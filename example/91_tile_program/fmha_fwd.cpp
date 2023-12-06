@@ -77,15 +77,11 @@ using FmhaMask = ck::tile_program::block::MaskDisabledPredicate;
 
 inline constexpr ck::index_t kKDramLoadScalarPerVector = 8;
 inline constexpr ck::index_t kVDramLoadScalarPerVector = 8;
-inline constexpr ck::index_t kKSmemLoadScalarPerVector = 8;
-inline constexpr ck::index_t kVSmemLoadScalarPerVector = 8;
 inline constexpr bool kM0NeedPadding                   = true;
 inline constexpr bool kN0K1NeedPadding                 = true;
 inline constexpr bool kSupportsBias                    = true;
 using FmhaTraits = ck::tile_program::TileFmhaTraits<kKDramLoadScalarPerVector,
                                                     kVDramLoadScalarPerVector,
-                                                    kKSmemLoadScalarPerVector,
-                                                    kVSmemLoadScalarPerVector,
                                                     kM0NeedPadding,
                                                     kN0K1NeedPadding,
                                                     kSupportsBias>;

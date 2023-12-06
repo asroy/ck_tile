@@ -45,8 +45,6 @@ struct BlockFmhaPipelineProblem
     // attributes from traits
     static constexpr index_t kKDramLoadScalarPerVector = Traits::kKDramLoadScalarPerVector;
     static constexpr index_t kVDramLoadScalarPerVector = Traits::kVDramLoadScalarPerVector;
-    static constexpr index_t kKSmemLoadScalarPerVector = Traits::kKSmemLoadScalarPerVector;
-    static constexpr index_t kVSmemLoadScalarPerVector = Traits::kVSmemLoadScalarPerVector;
     static constexpr bool kM0NeedPadding               = Traits::kM0NeedPadding;
     static constexpr bool kN0K1NeedPadding             = Traits::kN0K1NeedPadding;
     static constexpr bool kSupportsBias                = Traits::kSupportsBias;

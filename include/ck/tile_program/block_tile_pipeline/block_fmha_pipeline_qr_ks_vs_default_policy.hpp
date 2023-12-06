@@ -29,23 +29,25 @@ struct BlockFmhaPipelineQRKSVSDefaultPolicy
     template <typename Problem>
     __host__ __device__ static constexpr auto GetSmemKPackK()
     {
+        constexpr index_t kKSmemLoadScalarPerVector = 8;
+
         // TODO: this is for 3d layout
         using KDataType = remove_cvref_t<typename Problem::KDataType>;
-        static_assert(
-            kMaxNumBytesPerLoad % (Problem::kKSmemLoadScalarPerVector * sizeof(KDataType)) == 0);
+        static_assert(kMaxNumBytesPerLoad % (kKSmemLoadScalarPerVector * sizeof(KDataType)) == 0);
 
-        return Problem::kKSmemLoadScalarPerVector;
+        return kKSmemLoadScalarPerVector;
     }
 
     template <typename Problem>
     __host__ __device__ static constexpr auto GetSmemKPackV()
     {
+        constexpr index_t kVSmemLoadScalarPerVector = 8;
+
         // TODO: this is for 3d layout
         using VDataType = remove_cvref_t<typename Problem::VDataType>;
-        static_assert(
-            kMaxNumBytesPerLoad % (Problem::kVSmemLoadScalarPerVector * sizeof(VDataType)) == 0);
+        static_assert(kMaxNumBytesPerLoad % (kVSmemLoadScalarPerVector * sizeof(VDataType)) == 0);
 
-        return Problem::kVSmemLoadScalarPerVector;
+        return kVSmemLoadScalarPerVector;
     }
 
     template <typename Problem>
