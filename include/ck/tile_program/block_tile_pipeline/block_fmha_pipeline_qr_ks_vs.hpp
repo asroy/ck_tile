@@ -260,7 +260,7 @@ struct BlockFmhaPipelineQRKSVS
             if constexpr(kN0K1NeedPadding ||
                          !is_same_v<typename CausalMask::MaskOutPredicate, MaskDisabledPredicate>)
             {
-                set_value_if(
+                set_tile_if(
                     s_acc, -NumericLimits<SMPLComputeDataType>::Infinity(), [&](auto tile_idx) {
                         const auto row = q_origin.At(Number<0>{}) + tile_idx.At(Number<0>{});
                         const auto col = k_origin.At(Number<0>{}) + tile_idx.At(Number<1>{});
