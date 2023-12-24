@@ -37,7 +37,7 @@ struct BlockFmhaPipelineQRKSVSAsync
     using PDataType           = remove_cvref_t<typename Problem::PDataType>;
     using OaccDataType        = remove_cvref_t<typename Problem::OaccDataType>;
     using ODataType           = remove_cvref_t<typename Problem::ODataType>;
-    using BlockFmhaMask       = remove_cvref_t<typename Problem::BlockFmhaMask>;
+    using FmhaMask            = remove_cvref_t<typename Problem::FmhaMask>;
 
     using BlockFmhaShape             = remove_cvref_t<typename Problem::BlockFmhaShape>;
     using VLayout                    = remove_cvref_t<typename BlockFmhaShape::VLayout>;
@@ -328,8 +328,8 @@ struct BlockFmhaPipelineQRKSVSAsync
 #if !CK_FMHA_FWD_FAST_EXP2
                         x = scale * x + type_convert<SaccDataType>(bias_element_func(y));
 #else
-                        x = scale * x +
-                            math::log2e_v<SaccDataType> * type_convert<SaccDataType>(bias_element_func(y));
+                        x = scale * x + math::log2e_v<SaccDataType> *
+                                            type_convert<SaccDataType>(bias_element_func(y));
 #endif
                     },
                     s_acc,

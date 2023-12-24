@@ -108,7 +108,7 @@ struct FmhaShape</* HDim = */ 128>
 
 // using FmhaMask = ck::tile_program::block::MaskUpperTriangleFromTopLeftPredicate;
 // using FmhaMask = ck::tile_program::block::MaskUpperTriangleFromBottomRightPredicate;
-using FmhaMask = ck::tile_program::block::MaskDisabledPredicate;
+// using FmhaMask = ck::tile_program::block::MaskDisabledPredicate;
 
 inline constexpr bool kM0NeedPadding   = false;
 inline constexpr bool kN0K1NeedPadding = false;
@@ -121,7 +121,7 @@ using FmhaTraits = ck::tile_program::TileFmhaTraits<kM0NeedPadding,
 template <ck::index_t HDim>
 using FmhaTilePartitioner = FmhaFwdTilePartitioner<FmhaShape<HDim>>;
 
-template <ck::index_t HDim, bool kIsGroupMode, bool kHasBias>
+template <ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
 using FmhaPipelineProblem =
     ck::tile_program::block::BlockFmhaPipelineProblem<QDataType,
                                                       KDataType,
@@ -138,16 +138,16 @@ using FmhaPipelineProblem =
                                                       FmhaMask,
                                                       FmhaTraits<HDim, kHasBias>>;
 
-template <ck::index_t HDim, bool kIsGroupMode, bool kHasBias>
+template <ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
 using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync<
-    FmhaPipelineProblem<HDim, kIsGroupMode, kHasBias>>;
+    FmhaPipelineProblem<HDim, kIsGroupMode, FmhaMask, kHasBias>>;
 
 using FmhaEpilogue = FmhaFwdEpilogue<FmhaFwdEpilogueProblem<OaccDataType, ODataType>>;
 
-template <ck::index_t HDim, bool kIsGroupMode, bool kHasBias>
-using FmhaKernel = FmhaFwdKernel<FmhaTilePartitioner<HDim>,
-                                 FmhaPipeline<HDim, kIsGroupMode, kHasBias>,
-                                 FmhaEpilogue>;
+// template <ck::index_t HDim, bool kIsGroupMode, bool kHasBias>
+// using FmhaKernel = FmhaFwdKernel<FmhaTilePartitioner<HDim>,
+//                                 FmhaPipeline<HDim, kIsGroupMode, kHasBias>,
+//                                 FmhaEpilogue>;
 
 template <typename FmhaKernel_>
 float invoker_fmha_kernel(const void* q_ptr,
@@ -309,10 +309,92 @@ auto create_args(int argc, char* argv[])
                 "if true, will be b*h*s*d, else b*s*h*d")
         .insert("operm", "1", "permute output")
         .insert("bias", "0", "add bias or not")
+        .insert("mask",
+                "0",
+                "0: no mask, 1: top-left, 2:bottom-right\n"
+                "'t:l,r', top-left local-attn with left right size\n"
+                "'b:l,r', bottom-r local-attn with left right size\n")
         .insert("init", "1", "init method. 0:random int, 1:random float, 2:trig float");
 
     bool result = arg_parser.parse(argc, argv);
     return std::make_tuple(result, arg_parser);
+}
+
+enum class mask_enum
+{
+    no_mask = 0,
+    causal_top_left,
+    causal_bottom_right,
+    window_generic,
+};
+
+struct mask_info
+{
+    mask_enum type;
+    index_t x, y;
+};
+
+mask_info decode_mask_info(std::string str, index_t seqlen_q, index_t seqlen_k)
+{
+    index_t x_total = seqlen_k;
+    index_t y_total = seqlen_q;
+    mask_info tmp;
+    auto found_0 = str.find(':');
+    if(found_0 != std::string::npos)
+    {
+        std::string t = str.substr(0, found);
+        std::string v = str.substr(found + 1);
+        auto found_1  = v.find(",");
+        if(found_1 == std::string::npos)
+        {
+            printf("not supported value %s, %s\n", v.c_str(), str.c_str());
+            assert(0);
+        }
+        tmp.type   = window_generic;
+        index_t v0 = atoi(v.substr(0, found_1).c_str());
+        index_t v1 = atoi(v.substr(found_1 + 1).c_str());
+        // TODO: some validation
+        if(t == "t")
+        {
+            auto r = ck::make_generic_attention_mask_coordinates_from_lr_window(
+                v0, v1, x_total, y_total, true);
+            tmp.x = r.At(ck::Number<0>{});
+            tmp.y = r.At(ck::Number<1>{});
+        }
+        else if(t == "b")
+        {
+            auto r = ck::make_generic_attention_mask_coordinates_from_lr_window(
+                v0, v1, x_total, y_total, false);
+            tmp.x = r.At(ck::Number<0>{});
+            tmp.y = r.At(ck::Number<1>{});
+        }
+        else if(t == "g")
+        {
+            tmp.x = v0;
+            tmp.y = v1;
+        }
+        else
+        {
+            printf("not supported type %s, %s\n", t.c_str(), str.c_str());
+            assert(0);
+        }
+    }
+    else
+    {
+        // should be 0, 1, 2
+        tmp.type = static_cast<mask_enum>(atoi(str.c_str()));
+        if(tmp.type == mask_enum::causal_top_left)
+        {
+            tmp.x = 1;
+            tmp.y = seqlen_q;
+        }
+        else if(tmp.type == mask_enum::causal_bottom_right)
+        {
+            tmp.x = seqlen_k - seqlen_q + 1;
+            tmp.y = seqlen_q;
+        }
+    }
+    return tmp;
 }
 
 int main(int argc, char* argv[])
@@ -352,6 +434,8 @@ int main(int argc, char* argv[])
         scale = 1.0 / ck::math::sqrt(static_cast<float>(hdim_q)); // TODO: q ? v ?
 
     bool use_bias = arg_parser.get_uint32("bias");
+
+    mask_info mask = decode_mask_info(arg_parser.get_str("mask"), seqlen_q, seqlen_k);
 
     int init_method = arg_parser.get_int("init");
 
@@ -471,59 +555,77 @@ int main(int argc, char* argv[])
               << ", o:" << layout_str(o_perm) << ", bias:" << use_bias
               << ", v:" << std::string(VLayout::name)[0] << std::flush;
 
+#define INVOKE_FMHA_KERNEL(kernel_type_)                            \
+    invoker_fmha_kernel<kernel_type_>(q_buf.GetDeviceBuffer(),      \
+                                      k_buf.GetDeviceBuffer(),      \
+                                      v_buf.GetDeviceBuffer(),      \
+                                      bias_buf.GetDeviceBuffer(),   \
+                                      o_buf.GetDeviceBuffer(),      \
+                                      seqstart_q.GetDeviceBuffer(), \
+                                      seqstart_k.GetDeviceBuffer(), \
+                                      nullptr,                      \
+                                      batch,                        \
+                                      nhead,                        \
+                                      nhead_k,                      \
+                                      shape_seqlen_q,               \
+                                      shape_seqlen_k,               \
+                                      hdim_q,                       \
+                                      hdim_v,                       \
+                                      max_seqlen_q,                 \
+                                      scale,                        \
+                                      i_perm,                       \
+                                      o_perm,                       \
+                                      stream_config)
+
     float ave_time = 0;
     if(hdim_q == hdim_v && hdim_q == 64)
     {
+        constexpr index_t HDim = 64;
         BOOL_SWITCH_2(mode == Mode::Group, kIsGroupMode, use_bias, kHasBias, [&] {
-            using Kernel = FmhaKernel</* HDim = */ 64, kIsGroupMode, kHasBias>;
-
-            ave_time = invoker_fmha_kernel<Kernel>(q_buf.GetDeviceBuffer(),
-                                                   k_buf.GetDeviceBuffer(),
-                                                   v_buf.GetDeviceBuffer(),
-                                                   bias_buf.GetDeviceBuffer(),
-                                                   o_buf.GetDeviceBuffer(),
-                                                   seqstart_q.GetDeviceBuffer(),
-                                                   seqstart_k.GetDeviceBuffer(),
-                                                   nullptr,
-                                                   batch,
-                                                   nhead,
-                                                   nhead_k,
-                                                   shape_seqlen_q,
-                                                   shape_seqlen_k,
-                                                   hdim_q,
-                                                   hdim_v,
-                                                   max_seqlen_q,
-                                                   scale,
-                                                   i_perm,
-                                                   o_perm,
-                                                   stream_config);
+            if(mask.type == mask_enum::no_mask)
+            {
+                using FmhaMask = ck::tile_program::block::GenericAttentionMask<true>;
+                using Kernel   = FmhaFwdKernel<FmhaTilePartitioner<HDim>,
+                                             FmhaPipeline<HDim, kIsGroupMode, FmhaMask, kHasBias>,
+                                             FmhaEpilogue>;
+                ave_time       = INVOKE_FMHA_KERNEL(Kernel);
+            }
+            else
+            {
+                BOOL_SWITCH(mask.type == mask_enum::window_generic, kIsLocal, [&]() {
+                    using FmhaMask = ck::tile_program::block::GenericAttentionMask<false, kIsLocal>;
+                    using Kernel =
+                        FmhaFwdKernel<FmhaTilePartitioner<HDim>,
+                                      FmhaPipeline<HDim, kIsGroupMode, FmhaMask, kHasBias>,
+                                      FmhaEpilogue>;
+                    ave_time = INVOKE_FMHA_KERNEL(Kernel);
+                });
+            }
         });
     }
     else if(hdim_q == hdim_v && hdim_q == 128)
     {
+        constexpr index_t HDim = 128;
         BOOL_SWITCH_2(mode == Mode::Group, kIsGroupMode, use_bias, kHasBias, [&] {
-            using Kernel = FmhaKernel</* HDim = */ 128, kIsGroupMode, kHasBias>;
-
-            ave_time = invoker_fmha_kernel<Kernel>(q_buf.GetDeviceBuffer(),
-                                                   k_buf.GetDeviceBuffer(),
-                                                   v_buf.GetDeviceBuffer(),
-                                                   bias_buf.GetDeviceBuffer(),
-                                                   o_buf.GetDeviceBuffer(),
-                                                   seqstart_q.GetDeviceBuffer(),
-                                                   seqstart_k.GetDeviceBuffer(),
-                                                   nullptr,
-                                                   batch,
-                                                   nhead,
-                                                   nhead_k,
-                                                   shape_seqlen_q,
-                                                   shape_seqlen_k,
-                                                   hdim_q,
-                                                   hdim_v,
-                                                   max_seqlen_q,
-                                                   scale,
-                                                   i_perm,
-                                                   o_perm,
-                                                   stream_config);
+            if(mask.type == mask_enum::no_mask)
+            {
+                using FmhaMask = ck::tile_program::block::GenericAttentionMask<true, false>;
+                using Kernel   = FmhaFwdKernel<FmhaTilePartitioner<HDim>,
+                                             FmhaPipeline<HDim, kIsGroupMode, FmhaMask, kHasBias>,
+                                             FmhaEpilogue>;
+                ave_time       = INVOKE_FMHA_KERNEL(Kernel);
+            }
+            else
+            {
+                BOOL_SWITCH(mask.type == mask_enum::window_generic, kIsLocal, [&]() {
+                    using FmhaMask = ck::tile_program::block::GenericAttentionMask<false, kIsLocal>;
+                    using Kernel =
+                        FmhaFwdKernel<FmhaTilePartitioner<HDim>,
+                                      FmhaPipeline<HDim, kIsGroupMode, FmhaMask, kHasBias>,
+                                      FmhaEpilogue>;
+                    ave_time = INVOKE_FMHA_KERNEL(Kernel);
+                });
+            }
         });
     }
     else
@@ -609,10 +711,15 @@ int main(int argc, char* argv[])
                     s_host_ref, bias_host_ref, s_host_ref);
             }
 
-            reference_batched_masking<SaccDataType, FmhaMask>(s_host_ref);
+            if(mask::type == mask_enum::no_mask) {
+                reference_batched_masking<SaccDataType>(s_host_ref, ck::tile_program::block::GenericAttentionMask<true>{});
+            } else {
+                reference_batched_masking<SaccDataType>(s_host_ref,
+                    ck::tile_program::block::GenericAttentionMask<false>{mask.x, mask.y, seqlen_k, seqlen_q});
+            }
             reference_batched_softmax<SMPLComputeDataType, SMPLComputeDataType, PDataType>(s_host_ref, p_host_ref);
             reference_batched_gemm<PDataType, VDataType, OaccDataType, ODataType>(p_host_ref, v_host_ref, o_host_ref);
-            
+
             Tensor<ODataType> o_host_result({nhead, real_seqlen_q, hdim_v});
             // permute
             if(o_perm) o_host_result.ForEach([&](auto& self, auto idx) { self(idx) = o_host(b, idx[0], idx[1] + query_offset, idx[2]); });

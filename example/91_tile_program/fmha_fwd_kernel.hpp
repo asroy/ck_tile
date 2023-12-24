@@ -40,12 +40,12 @@ struct FmhaFwdKernel
     static constexpr bool kM0NeedPadding   = FmhaPipeline::kM0NeedPadding;
     static constexpr bool kN0K1NeedPadding = FmhaPipeline::kN0K1NeedPadding;
     static constexpr bool kHasBias         = FmhaPipeline::kHasBias;
+    using FmhaMask                         = ck::remove_cvref_t<typename FmhaPipeline::FmhaMask>
 
-    using C0MatrixMask = ck::tile_program::block::C0MatrixMask_impl<
-        ck::remove_cvref_t<typename FmhaPipeline::BlockFmhaMask>>;
+        // using C0MatrixMask = ck::tile_program::block::C0MatrixMask_impl<
+        //     ck::remove_cvref_t<typename FmhaPipeline::FmhaMask>>;
 
-    private:
-    struct EmptyKargs
+        private : struct EmptyKargs
     {
     };
 
@@ -130,6 +130,11 @@ struct FmhaFwdKernel
     struct BatchModeBiasKargs : CommonBiasKargs
     {
         ck::index_t batch_stride_bias = 0;
+    };
+
+    struct MaskKargs
+    {
+        index_t x, y;
     };
 
     struct BatchModeKargs : CommonKargs,
