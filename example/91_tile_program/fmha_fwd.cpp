@@ -166,9 +166,13 @@ struct mask_info
     {
         if(type == mask_enum::no_mask)
             os << "n";
+        else if(type == mask_enum::causal_top_left)
+            os << "tl";
+        else if(type == mask_enum::causal_bottom_right)
+            os << "br";
         else
         {
-            os << "m(" << y << "/" << x << ")";
+            os << "g(" << y << "/" << x << ")";
         }
     }
     friend std::ostream& operator<<(std::ostream& os, const mask_info& mi);
@@ -617,9 +621,9 @@ int main(int argc, char* argv[])
     };
     // clang-format on
 
-    std::cout << "[" << mode << "] b:" << batch << ", h:" << nhead << "/" << nhead_k
-              << ", s:" << seqlen_q << "/" << seqlen_k << ", d:" << hdim_q << "/" << hdim_v
-              << ", scale:" << scale << ", i:" << layout_str(i_perm) << ", o:" << layout_str(o_perm)
+    std::cout << "[" << mode << "|" << layout_str(i_perm) << "|" << layout_str(o_perm)
+              << "] b:" << batch << ", h:" << nhead << "/" << nhead_k << ", s:" << seqlen_q << "/"
+              << seqlen_k << ", d:" << hdim_q << "/" << hdim_v << ", scale:" << scale
               << ", bias:" << use_bias << ", mask:" << mask
               << ", v:" << std::string(VLayout::name)[0] << std::flush;
 
@@ -741,9 +745,12 @@ int main(int argc, char* argv[])
 
             if(mask.type == mask_enum::no_mask) {
                 reference_batched_masking<SaccDataType>(s_host_ref, ck::tile_program::block::GenericAttentionMask<false>{});
+            } else if(mask.type == mask_enum::window_generic) {
+                reference_batched_masking<SaccDataType>(s_host_ref,
+                    ck::tile_program::block::GenericAttentionMask<true, true>{mask.y, mask.x, seqlen_q, seqlen_k});
             } else {
                 reference_batched_masking<SaccDataType>(s_host_ref,
-                    ck::tile_program::block::GenericAttentionMask<true>{mask.y, mask.x, seqlen_q, seqlen_k});
+                    ck::tile_program::block::GenericAttentionMask<true, false>{mask.y, mask.x, seqlen_q, seqlen_k});
             }
             reference_batched_softmax<SMPLComputeDataType, SMPLComputeDataType, PDataType>(s_host_ref, p_host_ref);
             reference_batched_gemm<PDataType, VDataType, OaccDataType, ODataType>(p_host_ref, v_host_ref, o_host_ref);

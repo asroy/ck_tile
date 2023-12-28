@@ -178,12 +178,6 @@ struct BlockFmhaPipelineQRKSVSAsync
         set_tile(m, NumericLimits<SMPLComputeDataType>::Lowest());
         clear_tile(l);
 
-        auto v_dram_window =
-            make_tile_window(v_dram_block_window_tmp.GetBottomTensorView(),
-                             v_dram_block_window_tmp.GetWindowLengths(),
-                             v_dram_block_window_tmp.GetWindowOrigin(),
-                             Policy::template MakeVDramTileDistribution<Problem>());
-
         __builtin_amdgcn_sched_barrier(0);
         const auto q_origin = q_dram_window.GetWindowOrigin();
         const auto [seqlen_k_start, seqlen_k_end] =
@@ -208,12 +202,11 @@ struct BlockFmhaPipelineQRKSVSAsync
             {bias_origin.At(Number<0>{}), seqlen_k_start}, // M/N
             Policy::template MakeBiasDramTileDistribution<Problem, decltype(gemm_0)>());
 
-        // bool skip_tile      = mask.IsTileSkippable(k_origin.At(Number<0>{}),
-        //                             q_origin.At(Number<0>{}),
-        //                             Number<kN0>{},
-        //                             Number<kM0>{}
-        //                             );
-        //     q_origin.At(Number<0>{}), k_origin.At(Number<0>{}), kM0, kN0);
+        auto v_dram_window =
+            make_tile_window(v_dram_block_window_tmp.GetBottomTensorView(),
+                             v_dram_block_window_tmp.GetWindowLengths(),
+                             {0, seqlen_k_start}, // TODO: hdim split?
+                             Policy::template MakeVDramTileDistribution<Problem>());
 
         // prefetch K tile
         async_load_tile_raw(k_lds_store(LdsSeq.At(Number<0>{})), k_dram_window);
@@ -228,27 +221,7 @@ struct BlockFmhaPipelineQRKSVSAsync
         index_t i_total_loops      = 0;
         constexpr index_t k0_loops = kK0BlockLength / kK0;
         constexpr index_t k1_loops = kN0 / kK1;
-#if 0
-        auto prefetch_k            = [&]() {
-            move_tile_window(k_dram_block_window, {kN0, 0});
-            k_dram_window = make_tile_window(k_dram_block_window.GetBottomTensorView(),
-                                             k_dram_block_window.GetWindowLengths(),
-                                             k_dram_block_window.GetWindowOrigin(),
-                                             Policy::template MakeKDramTileDistribution<Problem>());
 
-            k_origin  = k_dram_block_window.GetWindowOrigin();
-            skip_tile = mask.IsTileSkippable(
-                q_origin.At(Number<0>{}), k_origin.At(Number<0>{}), kM0, kN0);
-            if(!skip_tile)
-            {
-                if constexpr(k1_loops >= 2 &&
-                             LdsSeq.At(Number<0>{}) == LdsSeq.At(Number<k0_loops + k1_loops - 2>{}))
-                    __builtin_amdgcn_s_barrier();
-                async_load_tile_raw(k_lds_store(LdsSeq.At(Number<0>{})), k_dram_window);
-                move_tile_window(k_dram_window, {0, kK0});
-            }
-        };
-#endif
         // main loop
         do
         {
@@ -332,11 +305,12 @@ struct BlockFmhaPipelineQRKSVSAsync
             move_tile_window(bias_dram_window, {0, kN0});
             if constexpr(kN0K1NeedPadding || FmhaMask::IsMasking)
             {
-                const auto k_origin = k_dram_block_window.GetWindowOrigin();
-                if(mask.IsEdgeTile(q_origin.At(Number<0>{}),
-                                   k_origin.At(Number<0>{}),
-                                   Number<kM0>{},
-                                   Number<kN0>{}))
+                const auto k_origin      = k_dram_block_window.GetWindowOrigin();
+                bool need_perpixel_check = mask.IsEdgeTile(q_origin.At(Number<0>{}),
+                                                           k_origin.At(Number<0>{}),
+                                                           Number<kM0>{},
+                                                           Number<kN0>{});
+                if(need_perpixel_check)
                 {
                     set_tile_if(
                         s_acc, -NumericLimits<SMPLComputeDataType>::Infinity(), [&](auto tile_idx) {
