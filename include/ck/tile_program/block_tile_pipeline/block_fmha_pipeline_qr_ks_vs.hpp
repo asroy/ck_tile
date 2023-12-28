@@ -16,7 +16,6 @@
 #include "ck/tile_program/tile/slice_tile.hpp"
 #include "ck/tile_program/warp_tile/warp_gemm.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_default_policy.hpp"
-#include "ck/tile_program/block_tile/block_masking_specialization.hpp"
 #include "ck/tile_program/block_tile/block_reduce.hpp"
 #include "ck/tile_program/tile/shuffle_distributed_tensor.hpp"
 
@@ -70,8 +69,7 @@ struct BlockFmhaPipelineQRKSVS
               typename QElementFunction,
               typename KElementFunction,
               typename VElementFunction,
-              typename BiasElementFunction,
-              typename CausalMask>
+              typename BiasElementFunction>
     __host__ __device__ auto
     operator()(const QDramBlockWindowTmp& q_dram_block_window_tmp, // M0*K0 tile
                const QElementFunction& q_element_func,
@@ -81,10 +79,8 @@ struct BlockFmhaPipelineQRKSVS
                const VElementFunction& v_element_func,
                const BiasDramBlockWindowTmp& bias_dram_block_window_tmp, // M0*N0 tile
                const BiasElementFunction& bias_element_func,
-               CausalMask causal_mask,
+               FmhaMask mask,
                float scale,
-               index_t num_total_loop,
-               index_t /*num_sub_loop_qk*/, // in this pipeline, the 1st gemm loop must be static
                void* smem_ptr) const
     {
         static_assert(
@@ -153,21 +149,29 @@ struct BlockFmhaPipelineQRKSVS
         set_tile(m, NumericLimits<SMPLComputeDataType>::Lowest());
         clear_tile(l);
 
-        auto k_dram_block_window = k_dram_block_window_tmp;
+        const auto q_origin = q_dram_window.GetWindowOrigin();
+        const auto [seqlen_k_start, seqlen_k_end] =
+            mask.GetTileRangeAlongX(q_origin.At(Number<0>{}), Number<kM0>{}, Number<kN0>{});
+
+        const auto num_total_loop = math::integer_divide_ceil(seqlen_k_end - seqlen_k_start, kN0);
+
+        auto k_dram_block_window = make_tile_window(k_dram_block_window_tmp.GetBottomTensorView(),
+                                                    k_dram_block_window_tmp.GetWindowLengths(),
+                                                    {seqlen_k_start, 0});
         auto v_dram_window =
             make_tile_window(v_dram_block_window_tmp.GetBottomTensorView(),
                              v_dram_block_window_tmp.GetWindowLengths(),
                              v_dram_block_window_tmp.GetWindowOrigin(),
                              Policy::template MakeVDramTileDistribution<Problem>());
 
-        auto bias_dram_window = make_tile_window(
+        const auto bias_origin = bias_dram_block_window_tmp.GetWindowOrigin();
+        auto bias_dram_window  = make_tile_window(
             bias_dram_block_window_tmp.GetBottomTensorView(),
             bias_dram_block_window_tmp.GetWindowLengths(),
-            bias_dram_block_window_tmp.GetWindowOrigin(),
+            {bias_origin.At(Number<0>{}), seqlen_k_start}, // M/N
             Policy::template MakeBiasDramTileDistribution<Problem, decltype(gemm_0)>());
 
-        const auto q_origin = q_dram_window.GetWindowOrigin();
-        auto q_tile         = tile_elementwise_in(q_element_func, q);
+        auto q_tile = tile_elementwise_in(q_element_func, q);
 
         // prefetch K tile
         index_t i_total_loops      = 0;
@@ -176,11 +180,11 @@ struct BlockFmhaPipelineQRKSVS
         do
         {
             const auto k_origin = k_dram_block_window.GetWindowOrigin();
-            if(causal_mask.IsTileSkippable(
-                   q_origin.At(Number<0>{}), k_origin.At(Number<0>{}), kM0, kN0))
-            {
-                continue;
-            }
+            // if(mask.IsTileSkippable(q_origin.At(Number<0>{}), k_origin.At(Number<0>{}), kM0,
+            // kN0))
+            // {
+            //     continue;
+            // }
 
             // STAGE 1, QK gemm
             auto k_dram_window = make_tile_window(
@@ -271,15 +275,14 @@ struct BlockFmhaPipelineQRKSVS
                     bias_tile);
             }
             move_tile_window(bias_dram_window, {0, kN0});
-            if constexpr(kN0K1NeedPadding ||
-                         !is_same_v<typename CausalMask::MaskOutPredicate, MaskDisabledPredicate>)
+            if constexpr(kN0K1NeedPadding || FmhaMask::IsMasking)
             {
                 set_tile_if(
                     s_acc, -NumericLimits<SMPLComputeDataType>::Infinity(), [&](auto tile_idx) {
                         const auto row = q_origin.At(Number<0>{}) + tile_idx.At(Number<0>{});
                         const auto col = k_origin.At(Number<0>{}) + tile_idx.At(Number<1>{});
 
-                        return causal_mask.IsMaskedElement(row, col);
+                        return mask.IsOutOfBound(row, col);
                     });
             }
 
@@ -431,17 +434,14 @@ struct BlockFmhaPipelineQRKSVS
     template <typename QDramBlockWindowTmp,
               typename KDramBlockWindowTmp,
               typename VDramBlockWindowTmp,
-              typename BiasDramBlockWindowTmp,
-              typename CausalMask>
+              typename BiasDramBlockWindowTmp>
     __host__ __device__ auto
     operator()(const QDramBlockWindowTmp& q_dram_block_window_tmp,       // M0*K0 tile
                const KDramBlockWindowTmp& k_dram_block_window_tmp,       // N0*K0 tile
                const VDramBlockWindowTmp& v_dram_block_window_tmp,       // N1*K1 tile
                const BiasDramBlockWindowTmp& bias_dram_block_window_tmp, // M0*N0 tile
-               CausalMask causal_mask,
+               FmhaMask mask,
                float scale,
-               index_t num_total_loop,
-               index_t num_sub_loop_qk,
                void* smem_ptr) const
     {
         return operator()(q_dram_block_window_tmp,
@@ -452,10 +452,8 @@ struct BlockFmhaPipelineQRKSVS
                           identity{},
                           bias_dram_block_window_tmp,
                           identity{},
-                          causal_mask,
+                          mask,
                           scale,
-                          num_total_loop,
-                          num_sub_loop_qk,
                           smem_ptr);
     }
 };
