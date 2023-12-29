@@ -145,11 +145,6 @@ using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync<
 
 using FmhaEpilogue = FmhaFwdEpilogue<FmhaFwdEpilogueProblem<OaccDataType, ODataType>>;
 
-// template <ck::index_t HDim, bool kIsGroupMode, bool kHasBias>
-// using FmhaKernel = FmhaFwdKernel<FmhaTilePartitioner<HDim>,
-//                                 FmhaPipeline<HDim, kIsGroupMode, kHasBias>,
-//                                 FmhaEpilogue>;
-
 enum class mask_enum
 {
     no_mask = 0,

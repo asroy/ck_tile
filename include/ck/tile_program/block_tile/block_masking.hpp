@@ -79,6 +79,7 @@ struct GenericAttentionMask
 
     // to get the loop length along X axis, return index:[start, end), end-start=length
     // use this if need loop over X axis tile by tile (like k-seqlen loopover)
+    // TODO: x_end still could be negative, so end-start could be negative(need check)
     template <index_t YTile, index_t XTile>
     __host__ __device__ constexpr auto
     GetTileRangeAlongX(index_t i_y, Number<YTile>, Number<XTile>) const
@@ -102,6 +103,8 @@ struct GenericAttentionMask
                 }
             }();
 
+            // TODO: end could be negative, we ignore clamp here, and let caller to check
+            //      ... in which case end-start is negative
             index_t x_end = [&]() {
                 index_t tmp = math::min(i_y + YTile - 1 + x, x_total);
                 return ((tmp + XTile - 1) / XTile) * XTile;
