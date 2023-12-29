@@ -77,6 +77,8 @@ struct GenericAttentionMask
     {
     }
 
+    // to get the loop length along X axis, return index:[start, end), end-start=length
+    // use this if need loop over X axis tile by tile (like k-seqlen loopover)
     template <index_t YTile, index_t XTile>
     __host__ __device__ constexpr auto
     GetTileRangeAlongX(index_t i_y, Number<YTile>, Number<XTile>) const
@@ -105,11 +107,11 @@ struct GenericAttentionMask
                 return ((tmp + XTile - 1) / XTile) * XTile;
             }();
 
-            // return index:[start, end), end-start=length
             return ck::make_tuple(x_start, x_end);
         }
     }
 
+    // per-pixel check if out-of-bound, if true, need mask a value(like -INF)
     __host__ __device__ constexpr auto IsOutOfBound(index_t i_y, index_t i_x) const
     {
         if constexpr(!IsMasking)
@@ -133,9 +135,10 @@ struct GenericAttentionMask
         }
     }
 
-    // if current tile is at the edge, which means need per-pixel mask check.
+    // if current tile is at the edge, means need per-pixel mask check.
     // otherwise no need to check per-pixel
     // Attention! assume the idex passed in this function is with in range of GetTileRangeAlongX()
+    // can be used as a fast-path to decide if do per-pixel check or not
     template <index_t YTile, index_t XTile>
     __host__ __device__ constexpr auto
     IsEdgeTile(index_t i_y, index_t i_x, Number<YTile>, Number<XTile>) const
@@ -164,6 +167,7 @@ struct GenericAttentionMask
 } // namespace tile_program
 
 // TODO: prefer use this function in host code
+// can convert from the FA style left/right to our generic coordinate
 // if left_size < 0 && right_size = 0, it is normal causal mask
 // local is left_size >=0 or right_size >=0
 __host__ constexpr auto
