@@ -39,7 +39,7 @@
 #include "fmha_fwd_kernel.hpp"
 #include "fmha_fwd_tile_partitioner.hpp"
 #include "fmha_fwd_epilogue.hpp"
-#include "fmha_utils.hpp"
+#include "utils.hpp"
 #include "mask.hpp"
 
 #if 1

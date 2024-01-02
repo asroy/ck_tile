@@ -1,7 +1,7 @@
 add_example_executable(example_fmha_fwd fmha_fwd.cpp)
 
 target_sources(example_fmha_fwd
-  PRIVATE mask.cpp
+  PRIVATE mask.cpp utils.cpp
 )
 
 # NOTE: this is dangerous since will change the whole kernel to flush denormals
