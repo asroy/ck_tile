@@ -299,7 +299,8 @@ struct FmhaFwdKernel
             reinterpret_cast<const VDataType*>(kargs.v_ptr) +
             static_cast<long_index_t>(i_nhead / kargs.nhead_ratio_qk) * kargs.nhead_stride_v +
             batch_offset_v;
-        ODataType* o_ptr = reinterpret_cast<ODataType*>(kargs.o_ptr) + static_cast<long_index_t>(i_nhead) * kargs.nhead_stride_o +
+        ODataType* o_ptr = reinterpret_cast<ODataType*>(kargs.o_ptr) +
+                           static_cast<long_index_t>(i_nhead) * kargs.nhead_stride_o +
                            batch_offset_o;
 
         // Q/K/V DRAM and DRAM window
@@ -409,7 +410,8 @@ struct FmhaFwdKernel
             if constexpr(kHasBias)
             {
                 const BiasDataType* bias_ptr =
-                    reinterpret_cast<const BiasDataType*>(kargs.bias_ptr) + static_cast<long_index_t>(i_nhead_) * kargs.nhead_stride_bias +
+                    reinterpret_cast<const BiasDataType*>(kargs.bias_ptr) +
+                    static_cast<long_index_t>(i_nhead_) * kargs.nhead_stride_bias +
                     batch_offset_bias;
 
                 const auto bias_dram = [&]() {
