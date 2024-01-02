@@ -13,7 +13,7 @@
 #include "ck/library/utility/host_tensor.hpp"
 #include "ck/library/utility/host_tensor_generator.hpp"
 
-#include "reference_softmax.hpp"
+#include "reference/reference_softmax.hpp"
 #include "softmax.hpp"
 
 int main(int argc, char* argv[])
