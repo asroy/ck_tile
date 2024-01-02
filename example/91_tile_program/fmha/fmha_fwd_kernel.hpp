@@ -9,6 +9,8 @@
 #include "ck/tensor/tensor_view.hpp"
 #include "ck/tile_program/tile/tile_window.hpp"
 
+#include "fmha_fwd_kargs.hpp"
+
 // S[seqlen_q, seqlen_k] = Q[seqlen_q, hdim_q] * K[seqlen_k, hdim_q]
 // S'[seqlen_q, seqlen_k] = S[seqlen_q, seqlen_k] * Scale[1]
 // S''[seqlen_q, seqlen_k] = S'[seqlen_q, seqlen_k] + Bias[seqlen_q, seqlen_k]
@@ -42,81 +44,7 @@ struct FmhaFwdKernel
     // using C0MatrixMask = ck::tile_program::block::C0MatrixMask_impl<
     //     ck::remove_cvref_t<typename FmhaPipeline::FmhaMask>>;
 
-    private:
-    template <ck::index_t I> // to avoid duplicated base class prblem, introduce an template arg
-    struct EmptyKargs
-    {
-    };
-
-    // kargs use aggregate initializer, so no constructor will provided
-    // use inheritance to minimize karg size
-    // user need to use MakeKargs() function to create kargs.
-    struct CommonKargs
-    {
-        const QDataType* q_ptr;
-        const KDataType* k_ptr;
-        const VDataType* v_ptr;
-        ODataType* o_ptr;
-
-        ck::index_t seqlen_q;
-        ck::index_t seqlen_k;
-        ck::index_t hdim_q;
-        ck::index_t hdim_v;
-
-        // for MQA/GQA, nhead could be different. This parameter is nhead_q / nhead_k
-        // if this param is larger than 1, indicate MQA/GQA case
-        ck::index_t nhead_ratio_qk;
-        float scale;
-
-        ck::index_t stride_q;
-        ck::index_t stride_k;
-        ck::index_t stride_v;
-        ck::index_t stride_o;
-
-        ck::index_t nhead_stride_q;
-        ck::index_t nhead_stride_k;
-        ck::index_t nhead_stride_v;
-        ck::index_t nhead_stride_o;
-    };
-
-    struct CommonBiasKargs
-    {
-        const BiasDataType* bias_ptr  = nullptr;
-        ck::index_t stride_bias       = 0;
-        ck::index_t nhead_stride_bias = 0;
-    };
-
-    struct BatchModeBiasKargs : CommonBiasKargs
-    {
-        ck::index_t batch_stride_bias = 0;
-    };
-
-    struct MaskKargs
-    {
-        ck::index_t mask_y, mask_x;
-    };
-
-    struct BatchModeKargs : CommonKargs,
-                            std::conditional_t<kHasBias, BatchModeBiasKargs, EmptyKargs<0>>,
-                            std::conditional_t<kHasMask, MaskKargs, EmptyKargs<1>>
-    {
-        ck::index_t batch_stride_q;
-        ck::index_t batch_stride_k;
-        ck::index_t batch_stride_v;
-        ck::index_t batch_stride_o;
-    };
-
-    struct GroupModeKargs : CommonKargs,
-                            std::conditional_t<kHasBias, CommonBiasKargs, EmptyKargs<0>>,
-                            std::conditional_t<kHasMask, MaskKargs, EmptyKargs<1>>
-    {
-        const int32_t* seqstart_q_ptr;
-        const int32_t* seqstart_k_ptr;
-        const int32_t* seqlen_k_ptr;
-    };
-
-    public:
-    using Kargs = std::conditional_t<kIsGroupMode, GroupModeKargs, BatchModeKargs>;
+    using Kargs = FmhaFwdKargs<kIsGroupMode, kHasBias, kHasMask>;
 
     template <bool Cond = !kIsGroupMode>
     __host__ static constexpr std::enable_if_t<Cond, Kargs> MakeKargs(const void* q_ptr,
@@ -148,10 +76,10 @@ struct FmhaFwdKernel
                                                                       ck::index_t mask_y,
                                                                       ck::index_t mask_x)
     {
-        Kargs kargs{{reinterpret_cast<const QDataType*>(q_ptr),
-                     reinterpret_cast<const KDataType*>(k_ptr),
-                     reinterpret_cast<const VDataType*>(v_ptr),
-                     reinterpret_cast<ODataType*>(o_ptr),
+        Kargs kargs{{q_ptr,
+                     k_ptr,
+                     v_ptr,
+                     o_ptr,
                      seqlen_q,
                      seqlen_k,
                      hdim_q,
@@ -179,7 +107,7 @@ struct FmhaFwdKernel
 
         if constexpr(kHasBias)
         {
-            kargs.bias_ptr          = reinterpret_cast<const BiasDataType*>(bias_ptr);
+            kargs.bias_ptr          = bias_ptr;
             kargs.stride_bias       = stride_bias;
             kargs.nhead_stride_bias = nhead_stride_bias;
             kargs.batch_stride_bias = batch_stride_bias;
@@ -220,10 +148,10 @@ struct FmhaFwdKernel
                                                                       ck::index_t mask_y,
                                                                       ck::index_t mask_x)
     {
-        Kargs kargs{{reinterpret_cast<const QDataType*>(q_ptr),
-                     reinterpret_cast<const KDataType*>(k_ptr),
-                     reinterpret_cast<const VDataType*>(v_ptr),
-                     reinterpret_cast<ODataType*>(o_ptr),
+        Kargs kargs{{q_ptr,
+                     k_ptr,
+                     v_ptr,
+                     o_ptr,
                      -1, // seqlen will be updated by another pointer
                      -1, //
                      hdim_q,
@@ -250,7 +178,7 @@ struct FmhaFwdKernel
 
         if constexpr(kHasBias)
         {
-            kargs.bias_ptr          = reinterpret_cast<const BiasDataType*>(bias_ptr);
+            kargs.bias_ptr          = bias_ptr;
             kargs.stride_bias       = stride_bias;
             kargs.nhead_stride_bias = nhead_stride_bias;
         }
@@ -360,18 +288,18 @@ struct FmhaFwdKernel
         }
 
         // for simplicity, batch stride we just modify the pointer
-        const QDataType* q_ptr = kargs.q_ptr +
+        const QDataType* q_ptr = reinterpret_cast<const QDataType*>(kargs.q_ptr) +
                                  static_cast<long_index_t>(i_nhead) * kargs.nhead_stride_q +
                                  batch_offset_q;
         const KDataType* k_ptr =
-            kargs.k_ptr +
+            reinterpret_cast<const KDataType*>(kargs.k_ptr) +
             static_cast<long_index_t>(i_nhead / kargs.nhead_ratio_qk) * kargs.nhead_stride_k +
             batch_offset_k;
         const VDataType* v_ptr =
-            kargs.v_ptr +
+            reinterpret_cast<const VDataType*>(kargs.v_ptr) +
             static_cast<long_index_t>(i_nhead / kargs.nhead_ratio_qk) * kargs.nhead_stride_v +
             batch_offset_v;
-        ODataType* o_ptr = kargs.o_ptr + static_cast<long_index_t>(i_nhead) * kargs.nhead_stride_o +
+        ODataType* o_ptr = reinterpret_cast<ODataType*>(kargs.o_ptr) + static_cast<long_index_t>(i_nhead) * kargs.nhead_stride_o +
                            batch_offset_o;
 
         // Q/K/V DRAM and DRAM window
@@ -481,7 +409,7 @@ struct FmhaFwdKernel
             if constexpr(kHasBias)
             {
                 const BiasDataType* bias_ptr =
-                    kargs.bias_ptr + static_cast<long_index_t>(i_nhead_) * kargs.nhead_stride_bias +
+                    reinterpret_cast<const BiasDataType*>(kargs.bias_ptr) + static_cast<long_index_t>(i_nhead_) * kargs.nhead_stride_bias +
                     batch_offset_bias;
 
                 const auto bias_dram = [&]() {
