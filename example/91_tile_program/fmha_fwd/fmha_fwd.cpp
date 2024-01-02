@@ -140,7 +140,7 @@ using FmhaPipelineProblem =
                                                       FmhaTraits<HDim, kHasBias>>;
 
 template <ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
-using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVS<
+using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync<
     FmhaPipelineProblem<HDim, kIsGroupMode, FmhaMask, kHasBias>>;
 
 using FmhaEpilogue = FmhaFwdEpilogue<FmhaFwdEpilogueProblem<OaccDataType, ODataType>>;
