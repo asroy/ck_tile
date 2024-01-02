@@ -43,7 +43,7 @@ struct FmhaFwdCommonKargs
 
 struct FmhaFwdCommonBiasKargs
 {
-    const void* bias_ptr  = nullptr;
+    const void* bias_ptr          = nullptr;
     ck::index_t stride_bias       = 0;
     ck::index_t nhead_stride_bias = 0;
 };
@@ -59,9 +59,10 @@ struct FmhaFwdMaskKargs
 };
 
 template <bool kHasBias, bool kHasMask>
-struct FmhaFwdBatchModeKargs : FmhaFwdCommonKargs,
-                        std::conditional_t<kHasBias, FmhaFwdBatchModeBiasKargs, FmhaFwdEmptyKargs<0>>,
-                        std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
+struct FmhaFwdBatchModeKargs
+    : FmhaFwdCommonKargs,
+      std::conditional_t<kHasBias, FmhaFwdBatchModeBiasKargs, FmhaFwdEmptyKargs<0>>,
+      std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
 {
     ck::index_t batch_stride_q;
     ck::index_t batch_stride_k;
@@ -70,18 +71,33 @@ struct FmhaFwdBatchModeKargs : FmhaFwdCommonKargs,
 };
 
 template <bool kHasBias, bool kHasMask>
-struct FmhaFwdGroupModeKargs : FmhaFwdCommonKargs,
-                        std::conditional_t<kHasBias, FmhaFwdCommonBiasKargs, FmhaFwdEmptyKargs<0>>,
-                        std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
+struct FmhaFwdGroupModeKargs
+    : FmhaFwdCommonKargs,
+      std::conditional_t<kHasBias, FmhaFwdCommonBiasKargs, FmhaFwdEmptyKargs<0>>,
+      std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
 {
     const int32_t* seqstart_q_ptr;
     const int32_t* seqstart_k_ptr;
     const int32_t* seqlen_k_ptr;
 };
 
+namespace detail {
+// type dispatcher to avoid instantiating unnecessary types
 template <bool kIsGroupMode, bool kHasBias, bool kHasMask>
-using FmhaFwdKargs = std::conditional_t<
-  kIsGroupMode,
-  FmhaFwdGroupModeKargs<kHasBias, kHasMask>,
-  FmhaFwdBatchModeKargs<kHasBias, kHasMask>
->;
+struct get_fmha_fwd_kargs;
+
+template <bool kHasBias, bool kHasMask>
+struct get_fmha_fwd_kargs</* kIsGroupMode = */ true, kHasBias, kHasMask>
+{
+    using type = FmhaFwdGroupModeKargs<kHasBias, kHasMask>;
+};
+
+template <bool kHasBias, bool kHasMask>
+struct get_fmha_fwd_kargs</* kIsGroupMode = */ false, kHasBias, kHasMask>
+{
+    using type = FmhaFwdBatchModeKargs<kHasBias, kHasMask>;
+};
+} // namespace detail
+
+template <bool kIsGroupMode, bool kHasBias, bool kHasMask>
+using FmhaFwdKargs = typename detail::get_fmha_fwd_kargs<kIsGroupMode, kHasBias, kHasMask>::type;
