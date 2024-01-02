@@ -43,3 +43,5 @@ std::vector<int32_t> generate_seqstarts_k(Mode mode,
                                                  ck::span<const int32_t> seqlens_q,
                                                  int32_t seqlens_q_sum,
                                                  std::optional<unsigned> seed = std::nullopt);
+
+int env_get_int(const char* var_name, int default_int);

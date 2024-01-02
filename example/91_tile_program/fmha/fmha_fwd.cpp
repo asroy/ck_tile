@@ -324,15 +324,6 @@ struct fmha_fwd_kernel_invoker
     }
 };
 
-static inline int env_get_int(const char* var_name, int default_int)
-{
-    char* v = getenv(var_name);
-    int r   = default_int;
-    if(v)
-        r = atoi(v);
-    return r;
-}
-
 auto create_args(int argc, char* argv[])
 {
     ArgParser arg_parser;

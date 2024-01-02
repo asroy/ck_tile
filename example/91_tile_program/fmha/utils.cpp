@@ -123,3 +123,12 @@ std::vector<int32_t> generate_seqstarts_k(Mode mode,
     return to_seqstarts(
         generate_seqlens_k(mode, count, seqlens_k_sum, seqlens_q, seqlens_q_sum, seed));
 }
+
+int env_get_int(const char* var_name, int default_int)
+{
+    char* v = getenv(var_name);
+    int r   = default_int;
+    if(v)
+        r = atoi(v);
+    return r;
+}
