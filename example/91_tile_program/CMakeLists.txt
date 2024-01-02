@@ -3,7 +3,7 @@ include_directories(BEFORE
 )
 
 add_subdirectory(batched_gemm_softmax_gemm)
-add_subdirectory(fmha_fwd)
+add_subdirectory(fmha)
 add_subdirectory(gemm)
 add_subdirectory(gemm_gemm)
 add_subdirectory(gemm_softmax_gemm)
