@@ -22,10 +22,8 @@ std::vector<int32_t> to_seqstarts(ck::span<const int32_t> seqlens)
     return seqstarts;
 }
 
-std::vector<int32_t> generate_seqlens_q(Mode mode,
-                                               unsigned count,
-                                               int32_t seqlens_q_sum,
-                                               std::optional<unsigned> seed)
+std::vector<int32_t>
+generate_seqlens_q(Mode mode, unsigned count, int32_t seqlens_q_sum, std::optional<unsigned> seed)
 {
     assert(0 < count);
 
@@ -69,11 +67,11 @@ std::tuple<std::vector<int32_t>, std::vector<int32_t>> generate_seqlens_seqstart
 }
 
 std::vector<int32_t> generate_seqlens_k(Mode mode,
-                                               unsigned count,
-                                               int32_t seqlens_k_sum,
-                                               ck::span<const int32_t> seqlens_q,
-                                               int32_t seqlens_q_sum,
-                                               std::optional<unsigned> seed)
+                                        unsigned count,
+                                        int32_t seqlens_k_sum,
+                                        ck::span<const int32_t> seqlens_q,
+                                        int32_t seqlens_q_sum,
+                                        std::optional<unsigned> seed)
 {
     assert(0 < count);
     assert(seqlens_q.size() == count);
@@ -114,11 +112,11 @@ std::vector<int32_t> generate_seqlens_k(Mode mode,
 }
 
 std::vector<int32_t> generate_seqstarts_k(Mode mode,
-                                                 unsigned count,
-                                                 int32_t seqlens_k_sum,
-                                                 ck::span<const int32_t> seqlens_q,
-                                                 int32_t seqlens_q_sum,
-                                                 std::optional<unsigned> seed)
+                                          unsigned count,
+                                          int32_t seqlens_k_sum,
+                                          ck::span<const int32_t> seqlens_q,
+                                          int32_t seqlens_q_sum,
+                                          std::optional<unsigned> seed)
 {
     return to_seqstarts(
         generate_seqlens_k(mode, count, seqlens_k_sum, seqlens_q, seqlens_q_sum, seed));
