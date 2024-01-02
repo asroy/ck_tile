@@ -1,7 +1,7 @@
 add_example_executable(example_fmha_fwd fmha_fwd.cpp)
 
 target_sources(example_fmha_fwd
-  PRIVATE mask.cpp utils.cpp test.cpp
+  PRIVATE mask.cpp utils.cpp invoke_fmha_kernel_hdim128_fp16.cpp invoke_fmha_kernel_hdim64_fp16.cpp
 )
 
 # NOTE: this is dangerous since will change the whole kernel to flush denormals
@@ -11,7 +11,7 @@ if(NOT DEFINED FMHA_FWD_FAST_EXP2)
 endif()
 
 if(FMHA_FWD_FAST_EXP2)
-set_source_files_properties(fmha_fwd.cpp test.cpp PROPERTIES COMPILE_OPTIONS "-DCK_FMHA_FWD_FAST_EXP2=1;-fgpu-flush-denormals-to-zero")
+set_source_files_properties(fmha_fwd.cpp invoke_fmha_kernel_hdim128_fp16.cpp invoke_fmha_kernel_hdim64_fp16.cpp PROPERTIES COMPILE_OPTIONS "-DCK_FMHA_FWD_FAST_EXP2=1;-fgpu-flush-denormals-to-zero")
 else()
-set_source_files_properties(fmha_fwd.cpp test.cpp PROPERTIES COMPILE_OPTIONS "-DCK_FMHA_FWD_FAST_EXP2=0")
+set_source_files_properties(fmha_fwd.cpp invoke_fmha_kernel_hdim128_fp16.cpp invoke_fmha_kernel_hdim64_fp16.cpp PROPERTIES COMPILE_OPTIONS "-DCK_FMHA_FWD_FAST_EXP2=0")
 endif()
