@@ -8,6 +8,7 @@
 #include <tuple>
 #include <utility>
 
+#include "ck/ck.hpp"
 #include "ck/utility/common_header.hpp"
 #include "ck/tensor_description/tensor_descriptor_helper.hpp"
 #include "ck/tensor_description/cluster_descriptor.hpp"
@@ -22,12 +23,9 @@
 #include "ck/library/utility/host_tensor_generator.hpp"
 #include "ck/library/utility/literals.hpp"
 
-#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qkvs.hpp"
-#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qkvs_default_policy.hpp"
-#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async.hpp"
-#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs.hpp"
-#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_default_policy.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_problem.hpp"
+#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs.hpp"
+#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async.hpp"
 #include "ck/tile_program/tile/tile_fmha_shape.hpp"
 #include "ck/tile_program/tile/tile_fmha_traits.hpp"
 
@@ -39,111 +37,16 @@
 #include "fmha_fwd_kernel.hpp"
 #include "fmha_fwd_tile_partitioner.hpp"
 #include "fmha_fwd_epilogue.hpp"
-#include "utils.hpp"
 #include "mask.hpp"
+#include "utils.hpp"
 
 #if 1
-using QDataType           = ck::half_t;
-using KDataType           = ck::half_t;
-using VDataType           = ck::half_t;
-using BiasDataType        = ck::half_t;
-using SaccDataType        = float;      // data type for first gemm accumulation
-using SMPLComputeDataType = float;      // data type for reduction, softmax
-using PDataType           = ck::half_t; // data type for A matrix of second gemm
-using OaccDataType        = float;      // data type for second gemm accumulation
-using ODataType           = ck::half_t;
+#include "config_fp16.inc"
 #else
-using QDataType           = ck::bhalf_t;
-using KDataType           = ck::bhalf_t;
-using VDataType           = ck::bhalf_t;
-using BiasDataType        = ck::bhalf_t;
-using SaccDataType        = float;       // data type for first gemm accumulation
-using SMPLComputeDataType = float;       // data type for reduction, softmax
-using PDataType           = ck::bhalf_t; // data type for A matrix of second gemm
-using OaccDataType        = float;       // data type for second gemm accumulation
-using ODataType           = ck::bhalf_t;
+#include "config_bf16.inc"
 #endif
 
-//                                                 M0   N0  K0   N1  K1  K0L
-// using FmhaShape = ck::tile_program::TileFmhaShape<128,  64, 64, 128, 64>;
-// using FmhaShape = ck::tile_program::TileFmhaShape<128, 256, 32, 128, 32>;
-using VLayout = ck::tensor_layout::gemm::RowMajor; // (bs, nhead) seqlen * hdim
-// using VLayout = ck::tensor_layout::gemm::ColumnMajor; // (bs, nhead) hdim * seqlen
-
-template <ck::index_t HDim>
-struct FmhaBlockTile;
-
-template <>
-struct FmhaBlockTile</* HDim = */ 64> : ck::Sequence<128, 64, 32, 64, 32, 64>
-{
-};
-template <>
-struct FmhaBlockTile</* HDim = */ 128> : ck::Sequence<128, 128, 32, 128, 32, 128>
-{
-};
-using FmhaBlockWarps = ck::Sequence<4, 1, 1>;
-using FmhaWarpTile   = ck::Sequence<32, 32, 16>;
-
-template <ck::index_t HDim>
-struct FmhaShape;
-
-template <>
-struct FmhaShape</* HDim = */ 64> : ck::tile_program::TileFmhaShape<FmhaBlockTile</* HDim = */ 64>,
-                                                                    FmhaBlockWarps,
-                                                                    FmhaWarpTile,
-                                                                    FmhaBlockWarps,
-                                                                    FmhaWarpTile,
-                                                                    VLayout>
-{
-};
-template <>
-struct FmhaShape</* HDim = */ 128>
-    : ck::tile_program::TileFmhaShape<FmhaBlockTile</* HDim = */ 128>,
-                                      FmhaBlockWarps,
-                                      FmhaWarpTile,
-                                      FmhaBlockWarps,
-                                      FmhaWarpTile,
-                                      VLayout>
-{
-};
-
-// using FmhaMask = ck::tile_program::block::MaskUpperTriangleFromTopLeftPredicate;
-// using FmhaMask = ck::tile_program::block::MaskUpperTriangleFromBottomRightPredicate;
-// using FmhaMask = ck::tile_program::block::MaskDisabledPredicate;
-
-inline constexpr bool kM0NeedPadding   = false;
-inline constexpr bool kN0K1NeedPadding = false;
-template <ck::index_t HDim, bool kHasBias>
-using FmhaTraits = ck::tile_program::TileFmhaTraits<kM0NeedPadding,
-                                                    kN0K1NeedPadding,
-                                                    kHasBias,
-                                                    HDim == 64 ? /* occupancy = */ 3 : 2>;
-
-template <ck::index_t HDim>
-using FmhaTilePartitioner = FmhaFwdTilePartitioner<FmhaShape<HDim>>;
-
-template <ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
-using FmhaPipelineProblem =
-    ck::tile_program::block::BlockFmhaPipelineProblem<QDataType,
-                                                      KDataType,
-                                                      VDataType,
-                                                      SaccDataType,
-                                                      SMPLComputeDataType,
-                                                      BiasDataType,
-                                                      PDataType,
-                                                      OaccDataType,
-                                                      ODataType,
-                                                      /* BlockSize = */ 256,
-                                                      FmhaShape<HDim>,
-                                                      kIsGroupMode,
-                                                      FmhaMask,
-                                                      FmhaTraits<HDim, kHasBias>>;
-
-template <ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
-using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync<
-    FmhaPipelineProblem<HDim, kIsGroupMode, FmhaMask, kHasBias>>;
-
-using FmhaEpilogue = FmhaFwdEpilogue<FmhaFwdEpilogueProblem<OaccDataType, ODataType>>;
+#include "fmha_fwd_kernel_selector.inc"
 
 template <typename FmhaKernel_>
 float invoke_fmha_kernel(const void* q_ptr,
@@ -303,19 +206,16 @@ struct fmha_fwd_kernel_invoker
             if(mask.type == mask_enum::no_mask)
             {
                 using FmhaMask = ck::tile_program::block::GenericAttentionMask<false>;
-                using Kernel   = FmhaFwdKernel<FmhaTilePartitioner<HDim>,
-                                             FmhaPipeline<HDim, kIsGroupMode, FmhaMask, kHasBias>,
-                                             FmhaEpilogue>;
-                ave_time       = invoke_fmha_kernel<Kernel>(std::forward<Args>(args)...);
+                using Kernel   = FmhaFwdKernelSelector<HDim, kIsGroupMode, FmhaMask, kHasBias>;
+
+                ave_time = invoke_fmha_kernel<Kernel>(std::forward<Args>(args)...);
             }
             else
             {
                 BOOL_SWITCH(mask.type == mask_enum::window_generic, kIsLocal, [&]() {
                     using FmhaMask = ck::tile_program::block::GenericAttentionMask<true, kIsLocal>;
-                    using Kernel =
-                        FmhaFwdKernel<FmhaTilePartitioner<HDim>,
-                                      FmhaPipeline<HDim, kIsGroupMode, FmhaMask, kHasBias>,
-                                      FmhaEpilogue>;
+                    using Kernel   = FmhaFwdKernelSelector<HDim, kIsGroupMode, FmhaMask, kHasBias>;
+
                     ave_time = invoke_fmha_kernel<Kernel>(std::forward<Args>(args)...);
                 });
             }
