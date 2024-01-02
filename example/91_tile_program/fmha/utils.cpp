@@ -6,9 +6,9 @@
 
 #include "utils.hpp"
 
-std::ostream& operator<<(std::ostream& stream, Mode mode)
+std::ostream& operator<<(std::ostream& stream, mode_enum mode)
 {
-    return stream << (mode == Mode::Batch ? "batch" : "group");
+    return stream << (mode == mode_enum::batch ? "batch" : "group");
 }
 
 std::vector<int32_t> to_seqstarts(ck::span<const int32_t> seqlens)
@@ -22,14 +22,16 @@ std::vector<int32_t> to_seqstarts(ck::span<const int32_t> seqlens)
     return seqstarts;
 }
 
-std::vector<int32_t>
-generate_seqlens_q(Mode mode, unsigned count, int32_t seqlens_q_sum, std::optional<unsigned> seed)
+std::vector<int32_t> generate_seqlens_q(mode_enum mode,
+                                        unsigned count,
+                                        int32_t seqlens_q_sum,
+                                        std::optional<unsigned> seed)
 {
     assert(0 < count);
 
     std::vector<int32_t> seqlens_q(count, seqlens_q_sum);
 
-    if(mode == Mode::Group && 1 < count)
+    if(mode == mode_enum::group && 1 < count)
     {
         using size_type = std::vector<int32_t>::size_type;
 
@@ -60,13 +62,13 @@ generate_seqlens_q(Mode mode, unsigned count, int32_t seqlens_q_sum, std::option
 }
 
 std::tuple<std::vector<int32_t>, std::vector<int32_t>> generate_seqlens_seqstarts_q(
-    Mode mode, unsigned count, int32_t seqlens_q_sum, std::optional<unsigned> seed)
+    mode_enum mode, unsigned count, int32_t seqlens_q_sum, std::optional<unsigned> seed)
 {
     const std::vector<int32_t> seqlens_q = generate_seqlens_q(mode, count, seqlens_q_sum, seed);
     return std::make_tuple(seqlens_q, to_seqstarts(seqlens_q));
 }
 
-std::vector<int32_t> generate_seqlens_k(Mode mode,
+std::vector<int32_t> generate_seqlens_k(mode_enum mode,
                                         unsigned count,
                                         int32_t seqlens_k_sum,
                                         ck::span<const int32_t> seqlens_q,
@@ -78,7 +80,7 @@ std::vector<int32_t> generate_seqlens_k(Mode mode,
 
     std::vector<int32_t> seqlens_k(count, seqlens_k_sum);
 
-    if(mode == Mode::Group && 1 < count)
+    if(mode == mode_enum::group && 1 < count)
     {
         using size_type = std::vector<int32_t>::size_type;
 
@@ -111,7 +113,7 @@ std::vector<int32_t> generate_seqlens_k(Mode mode,
     return seqlens_k;
 }
 
-std::vector<int32_t> generate_seqstarts_k(Mode mode,
+std::vector<int32_t> generate_seqstarts_k(mode_enum mode,
                                           unsigned count,
                                           int32_t seqlens_k_sum,
                                           ck::span<const int32_t> seqlens_q,

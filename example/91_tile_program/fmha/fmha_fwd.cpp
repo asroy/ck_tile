@@ -86,7 +86,7 @@ int main(int argc, char* argv[])
         return -1;
 
     int do_validation   = arg_parser.get_int("v");
-    auto mode           = static_cast<Mode>(arg_parser.get_uint32("mode"));
+    auto mode           = static_cast<mode_enum>(arg_parser.get_uint32("mode"));
     ck::index_t batch   = arg_parser.get_int("b");
     ck::index_t nhead   = arg_parser.get_int("h");
     ck::index_t nhead_k = arg_parser.get_int("h_k");
@@ -173,9 +173,11 @@ int main(int argc, char* argv[])
     constexpr bool is_v_rowmajor = ck::is_same_v<VLayout, ck::tensor_layout::gemm::RowMajor>;
 
     // host memory for storing all the tensor elements
-    const ck::index_t shape_batch    = (mode == Mode::Batch ? batch : 1);
-    const ck::index_t shape_seqlen_q = (mode == Mode::Batch ? seqlen_q : seqstart_q_host.back());
-    const ck::index_t shape_seqlen_k = (mode == Mode::Batch ? seqlen_k : seqstart_k_host.back());
+    const ck::index_t shape_batch = (mode == mode_enum::batch ? batch : 1);
+    const ck::index_t shape_seqlen_q =
+        (mode == mode_enum::batch ? seqlen_q : seqstart_q_host.back());
+    const ck::index_t shape_seqlen_k =
+        (mode == mode_enum::batch ? seqlen_k : seqstart_k_host.back());
 
     Tensor<QDataType> q_host(get_lengths(i_perm, shape_batch, nhead, shape_seqlen_q, hdim_q));
     Tensor<KDataType> k_host(get_lengths(i_perm, shape_batch, nhead_k, shape_seqlen_k, hdim_q));
@@ -296,9 +298,9 @@ int main(int argc, char* argv[])
             const ck::index_t real_seqlen_k = seqstart_k_host[wb + 1] - seqstart_k_host[wb];
 
             // adjust matrix index according to the mode
-            const ck::index_t b            = (mode == Mode::Batch ? wb : 0);
-            const ck::index_t query_offset = (mode == Mode::Batch ? 0 : seqstart_q_host[wb]);
-            const ck::index_t key_offset   = (mode == Mode::Batch ? 0 : seqstart_k_host[wb]);
+            const ck::index_t b            = (mode == mode_enum::batch ? wb : 0);
+            const ck::index_t query_offset = (mode == mode_enum::batch ? 0 : seqstart_q_host[wb]);
+            const ck::index_t key_offset   = (mode == mode_enum::batch ? 0 : seqstart_k_host[wb]);
 
             const auto v_host_ref_lengths =
                 std::array<ck::index_t, 3>{nhead, hdim_v, real_seqlen_k};
