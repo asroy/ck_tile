@@ -1,5 +1,9 @@
 add_example_executable(example_fmha_fwd fmha_fwd.cpp)
 
+target_sources(example_fmha_fwd
+  PRIVATE mask.cpp
+)
+
 # NOTE: this is dangerous since will change the whole kernel to flush denormals
 #       WIP with compiler team for an exp2 intrinsic..., then remove this
 if(NOT DEFINED FMHA_FWD_FAST_EXP2)
