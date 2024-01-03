@@ -1,4 +1,4 @@
-include_directories(BEFORE
+include_directories(AFTER
   ${CMAKE_CURRENT_LIST_DIR}
 )
 

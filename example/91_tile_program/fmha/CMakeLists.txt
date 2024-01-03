@@ -1,6 +1,10 @@
+include_directories(AFTER
+  ${CMAKE_CURRENT_LIST_DIR}
+)
+
 add_example_executable(example_fmha_fwd fmha_fwd.cpp)
 
-file(GLOB FMHA_FWD_KERNEL_IMPL_FILES ${CMAKE_CURRENT_LIST_DIR}/invoke_fmha_kernel_*.cpp)
+file(GLOB FMHA_FWD_KERNEL_IMPL_FILES ${CMAKE_CURRENT_LIST_DIR}/kernels/*.cpp)
 target_sources(example_fmha_fwd PRIVATE
   mask.cpp
   utils.cpp
