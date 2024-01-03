@@ -54,7 +54,7 @@ using FmhaTraits = ck::tile_program::TileFmhaTraits<kM0NeedPadding,
                                                     kHasBias,
                                                     HDim == 64 ? /* occupancy = */ 3 : 2>;
 
-template <typename DataType, ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
+template <ck::index_t HDim, typename DataType, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
 using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<
     typename FmhaFwdTypeConfig<DataType>::QDataType,
     typename FmhaFwdTypeConfig<DataType>::KDataType,
@@ -71,9 +71,9 @@ using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<
     FmhaMask,
     FmhaTraits<HDim, kHasBias>>;
 
-template <typename DataType, ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
+template <ck::index_t HDim, typename DataType, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
 using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync<
-    FmhaPipelineProblem<DataType, HDim, kIsGroupMode, FmhaMask, kHasBias>>;
+    FmhaPipelineProblem<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>>;
 
 template <typename DataType>
 using FmhaEpilogue =
@@ -83,5 +83,5 @@ using FmhaEpilogue =
 template <ck::index_t HDim, typename DataType, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
 using FmhaFwdKernelSelector =
     FmhaFwdKernel<FmhaFwdTilePartitioner<FmhaShape<HDim>>,
-                  FmhaPipeline<DataType, HDim, kIsGroupMode, FmhaMask, kHasBias>,
+                  FmhaPipeline<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>,
                   FmhaEpilogue<DataType>>;
