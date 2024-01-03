@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "invoke_fmha_kernel_fwd.hpp"
-#include "macro.hpp"
+#include "fmha_fwd_kernel_selector.inc"
 
 #define DECL_FMHA_KERNEL_INVOKE_FUNC(kernel)                                                \
     extern template float invoke_fmha_kernel<PP_UNWRAP(kernel)>(const void* q_ptr,          \

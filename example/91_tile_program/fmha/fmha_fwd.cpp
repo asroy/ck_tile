@@ -31,17 +31,18 @@
 #include "ck/tile_program/tile/tile_fmha_traits.hpp"
 
 #include "common/arg_parser.hpp"
+#include "fmha_fwd_epilogue.hpp"
+#include "fmha_fwd_kernel.hpp"
+#include "fmha_fwd_tile_partitioner.hpp"
+#include "invoke_fmha_kernel_fwd.hpp"
+#include "macro.hpp"
+#include "mask.hpp"
 #include "reference/reference_batched_elementwise.hpp"
 #include "reference/reference_batched_gemm.hpp"
 #include "reference/reference_batched_masking.hpp"
 #include "reference/reference_batched_softmax.hpp"
-#include "fmha_fwd_epilogue.hpp"
-#include "fmha_fwd_kernel.hpp"
-#include "fmha_fwd_tile_partitioner.hpp"
-#include "mask.hpp"
 #include "utils.hpp"
 
-#include "fmha_fwd_kernel_selector.inc"
 #include "fmha_fwd_kernel_invoker.inc"
 
 auto create_args(int argc, char* argv[])
