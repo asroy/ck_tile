@@ -5,6 +5,7 @@
 #include <cstring>
 #include <numeric>
 #include <ostream>
+#include <string>
 #include <tuple>
 #include <utility>
 
@@ -68,6 +69,7 @@ auto create_args(int argc, char* argv[])
                 "if true, will be b*h*s*d, else b*s*h*d")
         .insert("operm", "1", "permute output")
         .insert("bias", "0", "add bias or not")
+        .insert("prec", "fp16", "data type. fp16 or bf16")
         .insert("mask",
                 "0",
                 "0: no mask, 1: top-left, 2:bottom-right\n"
@@ -80,12 +82,9 @@ auto create_args(int argc, char* argv[])
     return std::make_tuple(result, arg_parser);
 }
 
-int main(int argc, char* argv[])
+template <typename DataType>
+bool run(const ArgParser& arg_parser)
 {
-    auto [result, arg_parser] = create_args(argc, argv);
-    if(!result)
-        return -1;
-
     int do_validation   = arg_parser.get_int("v");
     auto mode           = static_cast<mode_enum>(arg_parser.get_uint32("mode"));
     ck::index_t batch   = arg_parser.get_int("b");
@@ -96,8 +95,8 @@ int main(int argc, char* argv[])
 
     if(nhead % nhead_k != 0)
     {
-        std::cout << "nhead:" << nhead << " must be multiple of nhead_k:" << nhead_k << std::endl;
-        return -1;
+        std::cerr << "nhead:" << nhead << " must be multiple of nhead_k:" << nhead_k << std::endl;
+        return false;
     }
 
     ck::index_t seqlen_q = arg_parser.get_int("s");
@@ -131,18 +130,17 @@ int main(int argc, char* argv[])
     const std::vector<int32_t> seqstart_k_host =
         generate_seqstarts_k(mode, batch, seqlen_k, seqlens_q, seqlen_q);
 
-    using DataType   = ck::half_t;
     using TypeConfig = FmhaFwdTypeConfig<DataType>;
 
-    using QDataType           = TypeConfig::QDataType;
-    using KDataType           = TypeConfig::KDataType;
-    using VDataType           = TypeConfig::VDataType;
-    using BiasDataType        = TypeConfig::BiasDataType;
-    using SaccDataType        = TypeConfig::SaccDataType;
-    using SMPLComputeDataType = TypeConfig::SMPLComputeDataType;
-    using PDataType           = TypeConfig::PDataType;
-    using OaccDataType        = TypeConfig::OaccDataType;
-    using ODataType           = TypeConfig::ODataType;
+    using QDataType           = typename TypeConfig::QDataType;
+    using KDataType           = typename TypeConfig::KDataType;
+    using VDataType           = typename TypeConfig::VDataType;
+    using BiasDataType        = typename TypeConfig::BiasDataType;
+    using SaccDataType        = typename TypeConfig::SaccDataType;
+    using SMPLComputeDataType = typename TypeConfig::SMPLComputeDataType;
+    using PDataType           = typename TypeConfig::PDataType;
+    using OaccDataType        = typename TypeConfig::OaccDataType;
+    using ODataType           = typename TypeConfig::ODataType;
 
     // accumulation numbers for performance evaluation
     std::size_t flop = 0, num_byte = 0;
@@ -289,7 +287,7 @@ int main(int argc, char* argv[])
     else
     {
         std::cerr << "not support hdim, will not run" << std::endl;
-        return -1;
+        return false;
     }
 
     float tflops = static_cast<float>(flop) / 1.E9 / ave_time;
@@ -395,12 +393,29 @@ int main(int argc, char* argv[])
                           << "\tseqstart_q: " << seqstart_q_host << std::endl
                           << "\tseqstart_k: " << seqstart_k_host << std::endl;
 
-                return -1;
+                return false;
             }
         }
     }
-    else
+
+    return true;
+}
+
+int main(int argc, char* argv[])
+{
+    auto [result, arg_parser] = create_args(argc, argv);
+    if(!result)
+        return -1;
+
+    const std::string data_type = arg_parser.get_str("prec");
+    if(data_type == "fp16")
     {
-        return 0;
+        return run<ck::half_t>(arg_parser) ? 0 : -2;
     }
+    else if(data_type == "bf16")
+    {
+        return run<ck::bhalf_t>(arg_parser) ? 0 : -2;
+    }
+
+    return -3;
 }
