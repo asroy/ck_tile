@@ -45,7 +45,7 @@
                                                          StreamConfig stream_config)
 
 // clang-format off
-// Head Dim = 128, No Mask
+// Head Dim = 128, DataType = fp16, No Mask
 DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
 DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
 DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
