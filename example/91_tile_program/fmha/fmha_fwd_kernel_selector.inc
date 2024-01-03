@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "config_dtypes.inc"
+
 // default settings for FmhaFwdKernelSelector<> type alias
 using VLayout = ck::tensor_layout::gemm::RowMajor; // (bs, nhead) seqlen * hdim
 // using VLayout = ck::tensor_layout::gemm::ColumnMajor; // (bs, nhead) hdim * seqlen

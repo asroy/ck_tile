@@ -17,7 +17,6 @@
 #include "invoke_fmha_kernel.hpp"
 #include "macro.hpp"
 
-#include "config_dtypes.inc"
 #include "fmha_fwd_kernel_selector.inc"
 
 #define DEFINE_FMHA_KERNEL_INVOKE_FUNC(kernel)                                       \
@@ -45,8 +44,8 @@
                                                          StreamConfig stream_config)
 
 // clang-format off
-DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, true >, true >));
-DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, true >, false>));
-DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, true >, true >));
-DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, true >, false>));
+DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, true>, true >));
+DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, true>, false>));
+DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, true>, true >));
+DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, true>, false>));
 // clang-format on

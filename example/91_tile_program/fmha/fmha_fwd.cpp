@@ -41,7 +41,6 @@
 #include "mask.hpp"
 #include "utils.hpp"
 
-#include "config_dtypes.inc"
 #include "fmha_fwd_kernel_selector.inc"
 #include "fmha_fwd_kernel_invoker.inc"
 
