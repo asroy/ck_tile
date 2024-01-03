@@ -97,8 +97,6 @@ int main(int argc, char* argv[])
         std::cout << "nhead:" << nhead << " must be multiple of nhead_k:" << nhead_k << std::endl;
         return -1;
     }
-    std::cout << "dtype: " << (std::is_same_v<ck::half_t, QDataType> ? "fp16" : "bf16")
-              << std::endl;
 
     ck::index_t seqlen_q = arg_parser.get_int("s");
     ck::index_t seqlen_k = arg_parser.get_int("s_k");
