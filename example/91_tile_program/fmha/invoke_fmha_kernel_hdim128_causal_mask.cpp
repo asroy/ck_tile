@@ -44,6 +44,7 @@
                                                          StreamConfig stream_config)
 
 // clang-format off
+// Head Dim = 128, Causal Mask
 DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
 DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
 DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));

@@ -31,33 +31,33 @@
                                                                 StreamConfig stream_config)
 
 // clang-format off
-// Head Dim = 128
+// Head Dim = 128, No Mask
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
-
+// Head Dim = 128, Generic Mask
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, true >, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, true >, false>));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, true >, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, true >, false>));
-
+// Head Dim = 128, Causal Mask
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, false>, false>));
 
-// Head Dim = 64
+// Head Dim = 64, No Mask
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
-
+// Head Dim = 64, Generic Mask
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<true, true>, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<true, true>, false>));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<true, true>, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<true, true>, false>));
-
+// Head Dim = 64, Causal Mask
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
 DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
