@@ -300,101 +300,101 @@ bool run(const ArgParser& arg_parser)
 
     if(do_validation)
     {
-        o_buf.FromDevice(o_host.data());
+        return true;
+    }
 
-        for(ck::index_t wb = 0; wb < batch; ++wb)
+    o_buf.FromDevice(o_host.data());
+
+    for(ck::index_t wb = 0; wb < batch; ++wb)
+    {
+        const ck::index_t real_seqlen_q = seqstart_q_host[wb + 1] - seqstart_q_host[wb];
+        const ck::index_t real_seqlen_k = seqstart_k_host[wb + 1] - seqstart_k_host[wb];
+
+        // adjust matrix index according to the mode
+        const ck::index_t b            = (mode == mode_enum::batch ? wb : 0);
+        const ck::index_t query_offset = (mode == mode_enum::batch ? 0 : seqstart_q_host[wb]);
+        const ck::index_t key_offset   = (mode == mode_enum::batch ? 0 : seqstart_k_host[wb]);
+
+        const auto v_host_ref_lengths = std::array<ck::index_t, 3>{nhead, hdim_v, real_seqlen_k};
+        const auto v_host_ref_strides =
+            is_v_rowmajor ? std::array<ck::index_t, 3>{hdim_v * real_seqlen_k, 1, hdim_v}
+                          : std::array<ck::index_t, 3>{hdim_v * real_seqlen_k, real_seqlen_k, 1};
+
+        Tensor<QDataType> q_host_ref({nhead, real_seqlen_q, hdim_q});
+        Tensor<KDataType> k_host_ref({nhead, real_seqlen_k, hdim_q});
+        Tensor<VDataType> v_host_ref(v_host_ref_lengths, v_host_ref_strides);
+        Tensor<ODataType> o_host_ref({nhead, real_seqlen_q, hdim_v});
+
+        Tensor<SMPLComputeDataType> s_host_ref({nhead, real_seqlen_q, real_seqlen_k});
+        Tensor<PDataType> p_host_ref({nhead, real_seqlen_q, real_seqlen_k});
+
+        ck::index_t nr = nhead / nhead_k;
+
+        // clang-format off
+        // permute
+        if(i_perm) q_host_ref.ForEach([&](auto& self, auto i) { self(i) = q_host(b, i[0], i[1] + query_offset, i[2]); });
+        else       q_host_ref.ForEach([&](auto& self, auto i) { self(i) = q_host(b, i[1] + query_offset, i[0], i[2]); });
+
+        if(i_perm) k_host_ref.ForEach([&](auto& self, auto i) { self(i) = k_host(b, i[0] / nr, i[1] + key_offset, i[2]); });
+        else       k_host_ref.ForEach([&](auto& self, auto i) { self(i) = k_host(b, i[1] + key_offset, i[0] / nr, i[2]); });
+
+        if constexpr (is_v_rowmajor) {
+            //                                                             v_host_ref: [nhead, hdim, seq], v_host: [b, h_k, s, d]
+            if(i_perm) v_host_ref.ForEach([&](auto& self, auto i) { self(i) = v_host(b, i[0] / nr, i[2] + key_offset, i[1]); });
+            //                                                             v_host_ref: [nhead, hdim, seq], v_host: [b, s, h_k, d]
+            else       v_host_ref.ForEach([&](auto& self, auto i) { self(i) = v_host(b, i[2] + key_offset, i[0] / nr, i[1]); });
+        }
+        else {
+            if(i_perm) v_host_ref.ForEach([&](auto& self, auto i) { self(i) = v_host(b, i[0] / nr, i[1], i[2] + key_offset); });
+            else       v_host_ref.ForEach([&](auto& self, auto i) { self(i) = v_host(b, i[1], i[0] / nr, i[2] + key_offset); });
+        }
+
+        // reference
+        reference_batched_gemm<QDataType, KDataType, SaccDataType, SMPLComputeDataType>(
+            q_host_ref, k_host_ref, s_host_ref,
+            ck::identity{}, ck::identity{},
+            [&](SaccDataType x) { return scale * x; });
+
+        if(use_bias)
         {
-            const ck::index_t real_seqlen_q = seqstart_q_host[wb + 1] - seqstart_q_host[wb];
-            const ck::index_t real_seqlen_k = seqstart_k_host[wb + 1] - seqstart_k_host[wb];
+            Tensor<BiasDataType> bias_host_ref({1, real_seqlen_q, real_seqlen_k});
+            if(i_perm)
+                bias_host_ref.ForEach([&](auto& self, auto i) { self(i) = bias_host(0, 0, i[1] + query_offset, i[2] + key_offset); });
+            else
+                bias_host_ref.ForEach([&](auto& self, auto i) { self(i) = bias_host(0, i[1] + query_offset, 0, i[2] + key_offset); });
 
-            // adjust matrix index according to the mode
-            const ck::index_t b            = (mode == mode_enum::batch ? wb : 0);
-            const ck::index_t query_offset = (mode == mode_enum::batch ? 0 : seqstart_q_host[wb]);
-            const ck::index_t key_offset   = (mode == mode_enum::batch ? 0 : seqstart_k_host[wb]);
+            // broadcast from [1, real_seqlen_q, real_seqlen_k] to [nhead, real_seqlen_q, real_seqlen_k]
+            reference_batched_elementwise<SMPLComputeDataType, BiasDataType, SMPLComputeDataType, SMPLComputeDataType>(
+                s_host_ref, bias_host_ref, s_host_ref);
+        }
 
-            const auto v_host_ref_lengths =
-                std::array<ck::index_t, 3>{nhead, hdim_v, real_seqlen_k};
-            const auto v_host_ref_strides =
-                is_v_rowmajor
-                    ? std::array<ck::index_t, 3>{hdim_v * real_seqlen_k, 1, hdim_v}
-                    : std::array<ck::index_t, 3>{hdim_v * real_seqlen_k, real_seqlen_k, 1};
+        if(mask.type == mask_enum::no_mask) {
+            reference_batched_masking<SaccDataType>(s_host_ref, ck::tile_program::block::GenericAttentionMask<false>{});
+        } else if(mask.type == mask_enum::window_generic) {
+            reference_batched_masking<SaccDataType>(s_host_ref,
+                ck::tile_program::block::GenericAttentionMask<true, true>{mask.y, mask.x, seqlen_q, seqlen_k});
+        } else {
+            reference_batched_masking<SaccDataType>(s_host_ref,
+                ck::tile_program::block::GenericAttentionMask<true, false>{mask.y, mask.x, seqlen_q, seqlen_k});
+        }
+        reference_batched_softmax<SMPLComputeDataType, SMPLComputeDataType, PDataType>(s_host_ref, p_host_ref);
+        reference_batched_gemm<PDataType, VDataType, OaccDataType, ODataType>(p_host_ref, v_host_ref, o_host_ref);
 
-            Tensor<QDataType> q_host_ref({nhead, real_seqlen_q, hdim_q});
-            Tensor<KDataType> k_host_ref({nhead, real_seqlen_k, hdim_q});
-            Tensor<VDataType> v_host_ref(v_host_ref_lengths, v_host_ref_strides);
-            Tensor<ODataType> o_host_ref({nhead, real_seqlen_q, hdim_v});
+        Tensor<ODataType> o_host_result({nhead, real_seqlen_q, hdim_v});
+        // permute
+        if(o_perm) o_host_result.ForEach([&](auto& self, auto idx) { self(idx) = o_host(b, idx[0], idx[1] + query_offset, idx[2]); });
+        else       o_host_result.ForEach([&](auto& self, auto idx) { self(idx) = o_host(b, idx[1] + query_offset, idx[0], idx[2]); });
+        // clang-format on
 
-            Tensor<SMPLComputeDataType> s_host_ref({nhead, real_seqlen_q, real_seqlen_k});
-            Tensor<PDataType> p_host_ref({nhead, real_seqlen_q, real_seqlen_k});
+        if(!ck::utils::check_err(o_host_result, o_host_ref))
+        {
+            std::cerr << "mismatch found at batch: " << wb << std::endl
+                      << "\tseqlen_q: " << real_seqlen_q << std::endl
+                      << "\tseqlen_k: " << real_seqlen_k << std::endl
+                      << "\tseqstart_q: " << seqstart_q_host << std::endl
+                      << "\tseqstart_k: " << seqstart_k_host << std::endl;
 
-            ck::index_t nr = nhead / nhead_k;
-
-            // clang-format off
-            // permute
-            if(i_perm) q_host_ref.ForEach([&](auto& self, auto i) { self(i) = q_host(b, i[0], i[1] + query_offset, i[2]); });
-            else       q_host_ref.ForEach([&](auto& self, auto i) { self(i) = q_host(b, i[1] + query_offset, i[0], i[2]); });
-
-            if(i_perm) k_host_ref.ForEach([&](auto& self, auto i) { self(i) = k_host(b, i[0] / nr, i[1] + key_offset, i[2]); });
-            else       k_host_ref.ForEach([&](auto& self, auto i) { self(i) = k_host(b, i[1] + key_offset, i[0] / nr, i[2]); });
-
-            if constexpr (is_v_rowmajor) {
-                //                                                             v_host_ref: [nhead, hdim, seq], v_host: [b, h_k, s, d] 
-                if(i_perm) v_host_ref.ForEach([&](auto& self, auto i) { self(i) = v_host(b, i[0] / nr, i[2] + key_offset, i[1]); });
-                //                                                             v_host_ref: [nhead, hdim, seq], v_host: [b, s, h_k, d]
-                else       v_host_ref.ForEach([&](auto& self, auto i) { self(i) = v_host(b, i[2] + key_offset, i[0] / nr, i[1]); });
-            }
-            else {
-                if(i_perm) v_host_ref.ForEach([&](auto& self, auto i) { self(i) = v_host(b, i[0] / nr, i[1], i[2] + key_offset); });
-                else       v_host_ref.ForEach([&](auto& self, auto i) { self(i) = v_host(b, i[1], i[0] / nr, i[2] + key_offset); });
-            }
-
-            // reference
-            reference_batched_gemm<QDataType, KDataType, SaccDataType, SMPLComputeDataType>(
-                q_host_ref, k_host_ref, s_host_ref,
-                ck::identity{}, ck::identity{},
-                [&](SaccDataType x) { return scale * x; });
-
-            if(use_bias)
-            {
-                Tensor<BiasDataType> bias_host_ref({1, real_seqlen_q, real_seqlen_k});
-                if(i_perm)
-                    bias_host_ref.ForEach([&](auto& self, auto i) { self(i) = bias_host(0, 0, i[1] + query_offset, i[2] + key_offset); });
-                else
-                    bias_host_ref.ForEach([&](auto& self, auto i) { self(i) = bias_host(0, i[1] + query_offset, 0, i[2] + key_offset); });
-                
-                // broadcast from [1, real_seqlen_q, real_seqlen_k] to [nhead, real_seqlen_q, real_seqlen_k]
-                reference_batched_elementwise<SMPLComputeDataType, BiasDataType, SMPLComputeDataType, SMPLComputeDataType>(
-                    s_host_ref, bias_host_ref, s_host_ref);
-            }
-
-            if(mask.type == mask_enum::no_mask) {
-                reference_batched_masking<SaccDataType>(s_host_ref, ck::tile_program::block::GenericAttentionMask<false>{});
-            } else if(mask.type == mask_enum::window_generic) {
-                reference_batched_masking<SaccDataType>(s_host_ref,
-                    ck::tile_program::block::GenericAttentionMask<true, true>{mask.y, mask.x, seqlen_q, seqlen_k});
-            } else {
-                reference_batched_masking<SaccDataType>(s_host_ref,
-                    ck::tile_program::block::GenericAttentionMask<true, false>{mask.y, mask.x, seqlen_q, seqlen_k});
-            }
-            reference_batched_softmax<SMPLComputeDataType, SMPLComputeDataType, PDataType>(s_host_ref, p_host_ref);
-            reference_batched_gemm<PDataType, VDataType, OaccDataType, ODataType>(p_host_ref, v_host_ref, o_host_ref);
-
-            Tensor<ODataType> o_host_result({nhead, real_seqlen_q, hdim_v});
-            // permute
-            if(o_perm) o_host_result.ForEach([&](auto& self, auto idx) { self(idx) = o_host(b, idx[0], idx[1] + query_offset, idx[2]); });
-            else       o_host_result.ForEach([&](auto& self, auto idx) { self(idx) = o_host(b, idx[1] + query_offset, idx[0], idx[2]); });
-            // clang-format on
-
-            if(!ck::utils::check_err(o_host_result, o_host_ref))
-            {
-                std::cerr << "mismatch found at batch: " << wb << std::endl
-                          << "\tseqlen_q: " << real_seqlen_q << std::endl
-                          << "\tseqlen_k: " << real_seqlen_k << std::endl
-                          << "\tseqstart_q: " << seqstart_q_host << std::endl
-                          << "\tseqstart_k: " << seqstart_k_host << std::endl;
-
-                return false;
-            }
+            return false;
         }
     }
 
