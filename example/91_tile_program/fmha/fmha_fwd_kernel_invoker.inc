@@ -31,44 +31,45 @@
 
 // clang-format off
 // Head Dim = 128, No Mask
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
 // Head Dim = 128, Generic Mask
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, true >, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, true >, false>));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, true >, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, true >, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true >, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true >, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true >, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true >, false>));
 // Head Dim = 128, Causal Mask
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, false, ck::tile_program::block::GenericAttentionMask<true, false>, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, false>));
 
 // Head Dim = 64, No Mask
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
 // Head Dim = 64, Generic Mask
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<true, true>, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<true, true>, false>));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<true, true>, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<true, true>, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true>, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true>, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true>, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true>, false>));
 // Head Dim = 64, Causal Mask
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, false, ck::tile_program::block::GenericAttentionMask<true, false>, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
+DECL_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, false>));
 // clang-format on
 
 #undef DECL_FMHA_KERNEL_INVOKE_FUNC
 
-template <ck::index_t HDim_>
+template <ck::index_t HDim_, typename DataType_>
 struct fmha_fwd_kernel_invoker
 {
     static constexpr ck::index_t HDim = HDim_;
+    using DataType                    = DataType_;
     // these args are used to select kernel.
     // args that may passed as karg shoule use operator()
     mode_enum mode;
@@ -88,7 +89,8 @@ struct fmha_fwd_kernel_invoker
             if(mask.type == mask_enum::no_mask)
             {
                 using FmhaMask = ck::tile_program::block::GenericAttentionMask<false>;
-                using Kernel   = FmhaFwdKernelSelector<HDim, kIsGroupMode, FmhaMask, kHasBias>;
+                using Kernel =
+                    FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
 
                 ave_time = invoke_fmha_kernel<Kernel>(std::forward<Args>(args)...);
             }
@@ -96,7 +98,8 @@ struct fmha_fwd_kernel_invoker
             {
                 BOOL_SWITCH(mask.type == mask_enum::window_generic, kIsLocal, [&]() {
                     using FmhaMask = ck::tile_program::block::GenericAttentionMask<true, kIsLocal>;
-                    using Kernel   = FmhaFwdKernelSelector<HDim, kIsGroupMode, FmhaMask, kHasBias>;
+                    using Kernel =
+                        FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
 
                     ave_time = invoke_fmha_kernel<Kernel>(std::forward<Args>(args)...);
                 });

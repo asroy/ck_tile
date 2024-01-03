@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "config_dtypes.inc"
-
 // default settings for FmhaFwdKernelSelector<> type alias
 using VLayout = ck::tensor_layout::gemm::RowMajor; // (bs, nhead) seqlen * hdim
 // using VLayout = ck::tensor_layout::gemm::ColumnMajor; // (bs, nhead) hdim * seqlen
@@ -56,30 +54,34 @@ using FmhaTraits = ck::tile_program::TileFmhaTraits<kM0NeedPadding,
                                                     kHasBias,
                                                     HDim == 64 ? /* occupancy = */ 3 : 2>;
 
-template <ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
-using FmhaPipelineProblem =
-    ck::tile_program::block::BlockFmhaPipelineProblem<QDataType,
-                                                      KDataType,
-                                                      VDataType,
-                                                      SaccDataType,
-                                                      SMPLComputeDataType,
-                                                      BiasDataType,
-                                                      PDataType,
-                                                      OaccDataType,
-                                                      ODataType,
-                                                      /* BlockSize = */ 256,
-                                                      FmhaShape<HDim>,
-                                                      kIsGroupMode,
-                                                      FmhaMask,
-                                                      FmhaTraits<HDim, kHasBias>>;
+template <typename DataType, ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
+using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<
+    typename FmhaFwdTypeConfig<DataType>::QDataType,
+    typename FmhaFwdTypeConfig<DataType>::KDataType,
+    typename FmhaFwdTypeConfig<DataType>::VDataType,
+    typename FmhaFwdTypeConfig<DataType>::SaccDataType,
+    typename FmhaFwdTypeConfig<DataType>::SMPLComputeDataType,
+    typename FmhaFwdTypeConfig<DataType>::BiasDataType,
+    typename FmhaFwdTypeConfig<DataType>::PDataType,
+    typename FmhaFwdTypeConfig<DataType>::OaccDataType,
+    typename FmhaFwdTypeConfig<DataType>::ODataType,
+    /* BlockSize = */ 256,
+    FmhaShape<HDim>,
+    kIsGroupMode,
+    FmhaMask,
+    FmhaTraits<HDim, kHasBias>>;
 
-template <ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
+template <typename DataType, ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
 using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync<
-    FmhaPipelineProblem<HDim, kIsGroupMode, FmhaMask, kHasBias>>;
+    FmhaPipelineProblem<DataType, HDim, kIsGroupMode, FmhaMask, kHasBias>>;
 
-using FmhaEpilogue = FmhaFwdEpilogue<FmhaFwdEpilogueProblem<OaccDataType, ODataType>>;
+template <typename DataType>
+using FmhaEpilogue =
+    FmhaFwdEpilogue<FmhaFwdEpilogueProblem<typename FmhaFwdTypeConfig<DataType>::OaccDataType,
+                                           typename FmhaFwdTypeConfig<DataType>::ODataType>>;
 
-template <ck::index_t HDim, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
-using FmhaFwdKernelSelector = FmhaFwdKernel<FmhaFwdTilePartitioner<FmhaShape<HDim>>,
-                                            FmhaPipeline<HDim, kIsGroupMode, FmhaMask, kHasBias>,
-                                            FmhaEpilogue>;
+template <ck::index_t HDim, typename DataType, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
+using FmhaFwdKernelSelector =
+    FmhaFwdKernel<FmhaFwdTilePartitioner<FmhaShape<HDim>>,
+                  FmhaPipeline<DataType, HDim, kIsGroupMode, FmhaMask, kHasBias>,
+                  FmhaEpilogue<DataType>>;

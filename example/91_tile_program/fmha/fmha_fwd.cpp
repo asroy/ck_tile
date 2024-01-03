@@ -34,6 +34,7 @@
 #include "fmha_fwd_epilogue.hpp"
 #include "fmha_fwd_kernel.hpp"
 #include "fmha_fwd_tile_partitioner.hpp"
+#include "fmha_fwd_type_config.hpp"
 #include "invoke_fmha_kernel_fwd.hpp"
 #include "macro.hpp"
 #include "mask.hpp"
@@ -129,6 +130,19 @@ int main(int argc, char* argv[])
     const auto [seqlens_q, seqstart_q_host] = generate_seqlens_seqstarts_q(mode, batch, seqlen_q);
     const std::vector<int32_t> seqstart_k_host =
         generate_seqstarts_k(mode, batch, seqlen_k, seqlens_q, seqlen_q);
+
+    using DataType   = ck::half_t;
+    using TypeConfig = FmhaFwdTypeConfig<DataType>;
+
+    using QDataType           = TypeConfig::QDataType;
+    using KDataType           = TypeConfig::KDataType;
+    using VDataType           = TypeConfig::VDataType;
+    using BiasDataType        = TypeConfig::BiasDataType;
+    using SaccDataType        = TypeConfig::SaccDataType;
+    using SMPLComputeDataType = TypeConfig::SMPLComputeDataType;
+    using PDataType           = TypeConfig::PDataType;
+    using OaccDataType        = TypeConfig::OaccDataType;
+    using ODataType           = TypeConfig::ODataType;
 
     // accumulation numbers for performance evaluation
     std::size_t flop = 0, num_byte = 0;
@@ -239,29 +253,29 @@ int main(int argc, char* argv[])
               << ", bias:" << use_bias << ", mask:" << mask
               << ", v:" << std::string(VLayout::name)[0] << std::flush;
 
-#define INVOKE_FMHA_KERNEL(hdim_)                                                      \
-    fmha_fwd_kernel_invoker<hdim_>{mode, use_bias, mask}(q_buf.GetDeviceBuffer(),      \
-                                                         k_buf.GetDeviceBuffer(),      \
-                                                         v_buf.GetDeviceBuffer(),      \
-                                                         bias_buf.GetDeviceBuffer(),   \
-                                                         o_buf.GetDeviceBuffer(),      \
-                                                         seqstart_q.GetDeviceBuffer(), \
-                                                         seqstart_k.GetDeviceBuffer(), \
-                                                         nullptr,                      \
-                                                         batch,                        \
-                                                         nhead,                        \
-                                                         nhead_k,                      \
-                                                         shape_seqlen_q,               \
-                                                         shape_seqlen_k,               \
-                                                         hdim_q,                       \
-                                                         hdim_v,                       \
-                                                         max_seqlen_q,                 \
-                                                         scale,                        \
-                                                         i_perm,                       \
-                                                         o_perm,                       \
-                                                         mask.y,                       \
-                                                         mask.x,                       \
-                                                         stream_config)
+#define INVOKE_FMHA_KERNEL(hdim_)                                                                \
+    fmha_fwd_kernel_invoker<hdim_, DataType>{mode, use_bias, mask}(q_buf.GetDeviceBuffer(),      \
+                                                                   k_buf.GetDeviceBuffer(),      \
+                                                                   v_buf.GetDeviceBuffer(),      \
+                                                                   bias_buf.GetDeviceBuffer(),   \
+                                                                   o_buf.GetDeviceBuffer(),      \
+                                                                   seqstart_q.GetDeviceBuffer(), \
+                                                                   seqstart_k.GetDeviceBuffer(), \
+                                                                   nullptr,                      \
+                                                                   batch,                        \
+                                                                   nhead,                        \
+                                                                   nhead_k,                      \
+                                                                   shape_seqlen_q,               \
+                                                                   shape_seqlen_k,               \
+                                                                   hdim_q,                       \
+                                                                   hdim_v,                       \
+                                                                   max_seqlen_q,                 \
+                                                                   scale,                        \
+                                                                   i_perm,                       \
+                                                                   o_perm,                       \
+                                                                   mask.y,                       \
+                                                                   mask.x,                       \
+                                                                   stream_config)
 
     float ave_time = 0;
     if(hdim_q == hdim_v && hdim_q == 64)
