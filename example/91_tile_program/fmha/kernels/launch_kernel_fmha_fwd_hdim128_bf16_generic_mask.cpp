@@ -3,8 +3,6 @@
 
 #include "ck/utility/data_type.hpp"
 
-#include "ck/tile_program/block_tile/block_masking.hpp"
-
 #include "fmha_fwd_kernel_selector.hpp"
 #include "launch_kernel_helper.hpp"
 
