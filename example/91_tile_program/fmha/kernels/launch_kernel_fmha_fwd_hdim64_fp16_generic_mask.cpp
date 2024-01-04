@@ -2,7 +2,6 @@
 // Copyright (c) 2018-2023, Advanced Micro Devices, Inc. All rights reserved.
 
 #include "ck/ck.hpp"
-#include "ck/host_utility/kernel_launch.hpp"
 #include "ck/utility/data_type.hpp"
 
 #include "ck/tile_program/block_tile/block_masking.hpp"
@@ -16,21 +15,15 @@
 #include "fmha_fwd_kernel.hpp"
 #include "fmha_fwd_tile_partitioner.hpp"
 #include "fmha_fwd_type_config.hpp"
-#include "macro.hpp"
+#include "launch_kernel_helper.hpp"
+#include "macro_utils.hpp"
 
 #include "fmha_fwd_kernel_selector.inc"
 
-#define DEFINE_FMHA_KERNEL_INVOKE_FUNC(kernel)                     \
-    template float launch_kernel<PP_UNWRAP(kernel)::BlockSize().x, \
-                                 PP_UNWRAP(kernel)::kBlockPerCu,   \
-                                 PP_UNWRAP(kernel),                \
-                                 PP_UNWRAP(kernel)::Kargs>(        \
-        const StreamConfig&, PP_UNWRAP(kernel), dim3, dim3, std::size_t, PP_UNWRAP(kernel)::Kargs)
-
 // clang-format off
 // Head Dim = 64, DataType = fp16, Generic Mask
-DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true>, true >));
-DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true>, false>));
-DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true>, true >));
-DEFINE_FMHA_KERNEL_INVOKE_FUNC((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true>, false>));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true>, true >));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true>, false>));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true>, true >));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true>, false>));
 // clang-format on
