@@ -16,68 +16,68 @@
 
 // clang-format off
 // Head Dim = 128, DataType = fp16, No Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMaskType::NoMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMaskType::NoMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMaskType::NoMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMaskType::NoMask, false>));
 // Head Dim = 128, DataType = fp16, Generic Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true >, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true >, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true >, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true >, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMaskType::GenericMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMaskType::GenericMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMaskType::GenericMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMaskType::GenericMask, false>));
 // Head Dim = 128, DataType = fp16, Causal Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMaskType::CausalMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMaskType::CausalMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMaskType::CausalMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMaskType::CausalMask, false>));
 
 // Head Dim = 64, DataType = fp16, No Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMaskType::NoMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMaskType::NoMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMaskType::NoMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMaskType::NoMask, false>));
 // Head Dim = 64, DataType = fp16, Generic Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, true>, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, true>, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMaskType::GenericMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMaskType::GenericMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMaskType::GenericMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMaskType::GenericMask, false>));
 // Head Dim = 64, DataType = fp16, Causal Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMaskType::CausalMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMaskType::CausalMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMaskType::CausalMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMaskType::CausalMask, false>));
 
 // Head Dim = 128, DataType = bf16, No Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMaskType::NoMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMaskType::NoMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMaskType::NoMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMaskType::NoMask, false>));
 // Head Dim = 128, DataType = bf16, Generic Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<true, true >, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<true, true >, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<true, true >, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<true, true >, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMaskType::GenericMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMaskType::GenericMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMaskType::GenericMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMaskType::GenericMask, false>));
 // Head Dim = 128, DataType = bf16, Causal Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMaskType::CausalMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMaskType::CausalMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMaskType::CausalMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMaskType::CausalMask, false>));
 
 // Head Dim = 64, DataType = bf16, No Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMaskType::NoMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMaskType::NoMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMaskType::NoMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMaskType::NoMask, false>));
 // Head Dim = 64, DataType = bf16, Generic Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<true, true>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<true, true>, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<true, true>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<true, true>, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMaskType::GenericMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMaskType::GenericMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMaskType::GenericMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMaskType::GenericMask, false>));
 // Head Dim = 64, DataType = bf16, Causal Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMaskType::CausalMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMaskType::CausalMask, false>));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMaskType::CausalMask, true >));
+DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMaskType::CausalMask, false>));
 // clang-format on
 
 template <ck::index_t HDim_, typename DataType_>
@@ -103,7 +103,7 @@ struct fmha_fwd_kernel_invoker
         BOOL_SWITCH_2(mode == mode_enum::group, kIsGroupMode, use_bias, kHasBias, [&] {
             if(mask.type == mask_enum::no_mask)
             {
-                using FmhaMask = ck::tile_program::block::GenericAttentionMask<false>;
+                using FmhaMask = FmhaMaskType::NoMask;
                 using Kernel =
                     FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
 

@@ -22,6 +22,13 @@
 using VLayout = ck::tensor_layout::gemm::RowMajor; // (bs, nhead) seqlen * hdim
 // using VLayout = ck::tensor_layout::gemm::ColumnMajor; // (bs, nhead) hdim * seqlen
 
+struct FmhaMaskType
+{
+    using NoMask      = ck::tile_program::block::GenericAttentionMask<false>;
+    using GenericMask = ck::tile_program::block::GenericAttentionMask<true, true>;
+    using CausalMask  = ck::tile_program::block::GenericAttentionMask<true, false>;
+};
+
 inline constexpr bool kM0NeedPadding   = false;
 inline constexpr bool kN0K1NeedPadding = false;
 

@@ -10,8 +10,8 @@
 
 // clang-format off
 // Head Dim = 128, DataType = fp16, No Mask
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, true >));
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , ck::tile_program::block::GenericAttentionMask<false>, false>));
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, true >));
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, ck::tile_program::block::GenericAttentionMask<false>, false>));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMaskType::NoMask, true >));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMaskType::NoMask, false>));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMaskType::NoMask, true >));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMaskType::NoMask, false>));
 // clang-format on

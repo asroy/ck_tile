@@ -10,8 +10,8 @@
 
 // clang-format off
 // Head Dim = 64, DataType = bf16, Causal Mask
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , ck::tile_program::block::GenericAttentionMask<true, false>, false>));
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, true >));
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, ck::tile_program::block::GenericAttentionMask<true, false>, false>));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMaskType::CausalMask, true >));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMaskType::CausalMask, false>));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMaskType::CausalMask, true >));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMaskType::CausalMask, false>));
 // clang-format on
