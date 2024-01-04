@@ -24,29 +24,14 @@
 #include "ck/library/utility/host_tensor_generator.hpp"
 #include "ck/library/utility/literals.hpp"
 
-#include "ck/tile_program/block_tile/block_masking.hpp"
-#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_problem.hpp"
-#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs.hpp"
-#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async.hpp"
-#include "ck/tile_program/tile/tile_fmha_shape.hpp"
-#include "ck/tile_program/tile/tile_fmha_traits.hpp"
-
 #include "common/arg_parser.hpp"
-#include "fmha_fwd_epilogue.hpp"
-#include "fmha_fwd_kernel.hpp"
-#include "fmha_fwd_tile_partitioner.hpp"
-#include "fmha_fwd_type_config.hpp"
-#include "invoke_fmha_kernel.hpp"
-#include "launch_kernel_helper.hpp"
-#include "macro_utils.hpp"
+#include "fmha_fwd_kernel_invoker.hpp"
 #include "mask.hpp"
 #include "reference/reference_batched_elementwise.hpp"
 #include "reference/reference_batched_gemm.hpp"
 #include "reference/reference_batched_masking.hpp"
 #include "reference/reference_batched_softmax.hpp"
 #include "utils.hpp"
-
-#include "fmha_fwd_kernel_invoker.inc"
 
 auto create_args(int argc, char* argv[])
 {

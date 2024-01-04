@@ -3,7 +3,16 @@
 
 #pragma once
 
-#include "fmha_fwd_kernel_selector.inc"
+#include "ck/utility/data_type.hpp"
+#include "ck/utility/static_switch.hpp"
+
+#include "ck/tile_program/block_tile/block_masking.hpp"
+
+#include "fmha_fwd_kernel_selector.hpp"
+#include "invoke_fmha_kernel.hpp"
+#include "launch_kernel_helper.hpp"
+#include "mask.hpp"
+#include "utils.hpp"
 
 // clang-format off
 // Head Dim = 128, DataType = fp16, No Mask

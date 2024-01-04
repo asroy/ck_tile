@@ -3,6 +3,21 @@
 
 #pragma once
 
+#include "ck/ck.hpp"
+#include "ck/tensor_operation/gpu/device/tensor_layout.hpp"
+
+#include "ck/tile_program/block_tile/block_masking.hpp"
+#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_problem.hpp"
+#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs.hpp"
+#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async.hpp"
+#include "ck/tile_program/tile/tile_fmha_shape.hpp"
+#include "ck/tile_program/tile/tile_fmha_traits.hpp"
+
+#include "fmha_fwd_epilogue.hpp"
+#include "fmha_fwd_kernel.hpp"
+#include "fmha_fwd_tile_partitioner.hpp"
+#include "fmha_fwd_type_config.hpp"
+
 // default settings for FmhaFwdKernelSelector<> type alias
 using VLayout = ck::tensor_layout::gemm::RowMajor; // (bs, nhead) seqlen * hdim
 // using VLayout = ck::tensor_layout::gemm::ColumnMajor; // (bs, nhead) hdim * seqlen
