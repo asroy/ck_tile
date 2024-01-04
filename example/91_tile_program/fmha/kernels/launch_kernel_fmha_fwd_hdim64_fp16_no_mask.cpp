@@ -10,8 +10,8 @@
 
 // clang-format off
 // Head Dim = 64, DataType = fp16, No Mask
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMaskType::NoMask, true >));
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMaskType::NoMask, false>));
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMaskType::NoMask, true >));
-INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMaskType::NoMask, false>));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMasks::NoMask, true >));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMasks::NoMask, false>));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMasks::NoMask, true >));
+INST_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMasks::NoMask, false>));
 // clang-format on
