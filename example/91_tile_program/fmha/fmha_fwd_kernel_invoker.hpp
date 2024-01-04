@@ -10,75 +10,10 @@
 
 #include "fmha_fwd_kernel_selector.hpp"
 #include "invoke_fmha_kernel.hpp"
-#include "launch_kernel_helper.hpp"
 #include "mask.hpp"
 #include "utils.hpp"
 
-// clang-format off
-// Head Dim = 128, DataType = fp16, No Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMasks::NoMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMasks::NoMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMasks::NoMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMasks::NoMask, false>));
-// Head Dim = 128, DataType = fp16, Generic Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMasks::GenericMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMasks::GenericMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMasks::GenericMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMasks::GenericMask, false>));
-// Head Dim = 128, DataType = fp16, Causal Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMasks::CausalMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, true , FmhaMasks::CausalMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMasks::CausalMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::half_t, false, FmhaMasks::CausalMask, false>));
-
-// Head Dim = 64, DataType = fp16, No Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMasks::NoMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMasks::NoMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMasks::NoMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMasks::NoMask, false>));
-// Head Dim = 64, DataType = fp16, Generic Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMasks::GenericMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMasks::GenericMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMasks::GenericMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMasks::GenericMask, false>));
-// Head Dim = 64, DataType = fp16, Causal Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMasks::CausalMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, true , FmhaMasks::CausalMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMasks::CausalMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::half_t, false, FmhaMasks::CausalMask, false>));
-
-// Head Dim = 128, DataType = bf16, No Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMasks::NoMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMasks::NoMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMasks::NoMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMasks::NoMask, false>));
-// Head Dim = 128, DataType = bf16, Generic Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMasks::GenericMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMasks::GenericMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMasks::GenericMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMasks::GenericMask, false>));
-// Head Dim = 128, DataType = bf16, Causal Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMasks::CausalMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, true , FmhaMasks::CausalMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMasks::CausalMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<128, ck::bhalf_t, false, FmhaMasks::CausalMask, false>));
-
-// Head Dim = 64, DataType = bf16, No Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMasks::NoMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMasks::NoMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMasks::NoMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMasks::NoMask, false>));
-// Head Dim = 64, DataType = bf16, Generic Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMasks::GenericMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMasks::GenericMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMasks::GenericMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMasks::GenericMask, false>));
-// Head Dim = 64, DataType = bf16, Causal Mask
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMasks::CausalMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, true , FmhaMasks::CausalMask, false>));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMasks::CausalMask, true >));
-DECL_LAUNCH_KERNEL((FmhaFwdKernelSelector<64, ck::bhalf_t, false, FmhaMasks::CausalMask, false>));
-// clang-format on
+#include "launch_kernel_fmha_fwd_decls.hpp"
 
 template <ck::index_t HDim_, typename DataType_>
 struct fmha_fwd_kernel_invoker
