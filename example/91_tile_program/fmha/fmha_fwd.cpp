@@ -11,6 +11,7 @@
 
 #include "ck/ck.hpp"
 #include "ck/host_utility/device_prop.hpp"
+#include "ck/host_utility/kernel_launch.hpp"
 #include "ck/tensor/tensor_view.hpp"
 #include "ck/tensor_description/tensor_descriptor_helper.hpp"
 #include "ck/tensor_description/cluster_descriptor.hpp"
@@ -36,7 +37,7 @@
 #include "fmha_fwd_kernel.hpp"
 #include "fmha_fwd_tile_partitioner.hpp"
 #include "fmha_fwd_type_config.hpp"
-#include "invoke_fmha_kernel_fwd.hpp"
+#include "invoke_fmha_kernel.hpp"
 #include "macro.hpp"
 #include "mask.hpp"
 #include "reference/reference_batched_elementwise.hpp"

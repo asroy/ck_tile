@@ -7,8 +7,6 @@
 #include "ck/host_utility/kernel_launch.hpp"
 #include "ck/tensor_operation/gpu/device/tensor_layout.hpp"
 
-#include "invoke_fmha_kernel_fwd.hpp"
-
 template <typename FmhaKernel>
 float invoke_fmha_kernel(const void* q_ptr,
                          const void* k_ptr,

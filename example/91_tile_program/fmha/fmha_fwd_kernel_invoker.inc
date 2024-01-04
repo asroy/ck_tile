@@ -5,29 +5,12 @@
 
 #include "fmha_fwd_kernel_selector.inc"
 
-#define DECL_FMHA_KERNEL_INVOKE_FUNC(kernel)                                                \
-    extern template float invoke_fmha_kernel<PP_UNWRAP(kernel)>(const void* q_ptr,          \
-                                                                const void* k_ptr,          \
-                                                                const void* v_ptr,          \
-                                                                const void* bias_ptr,       \
-                                                                void* o_ptr,                \
-                                                                const void* seqstart_q_ptr, \
-                                                                const void* seqstart_k_ptr, \
-                                                                const void* seqlen_k_ptr,   \
-                                                                ck::index_t batch,          \
-                                                                ck::index_t nhead,          \
-                                                                ck::index_t nhead_k,        \
-                                                                ck::index_t seqlen_q,       \
-                                                                ck::index_t seqlen_k,       \
-                                                                ck::index_t hdim_q,         \
-                                                                ck::index_t hdim_v,         \
-                                                                ck::index_t max_seqlen_q,   \
-                                                                float scale,                \
-                                                                bool i_perm,                \
-                                                                bool o_perm,                \
-                                                                ck::index_t mask_y,         \
-                                                                ck::index_t mask_x,         \
-                                                                StreamConfig stream_config)
+#define DECL_FMHA_KERNEL_INVOKE_FUNC(kernel)                              \
+    extern template float launch_kernel<PP_UNWRAP(kernel)::BlockSize().x, \
+                                        PP_UNWRAP(kernel)::kBlockPerCu,   \
+                                        PP_UNWRAP(kernel),                \
+                                        PP_UNWRAP(kernel)::Kargs>(        \
+        const StreamConfig&, PP_UNWRAP(kernel), dim3, dim3, std::size_t, PP_UNWRAP(kernel)::Kargs)
 
 // clang-format off
 // Head Dim = 128, DataType = fp16, No Mask
