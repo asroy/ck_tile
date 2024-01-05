@@ -332,7 +332,7 @@ bool run(const ArgParser& arg_parser)
               << std::setprecision(2) << tflops << " TFlops, " << std::setprecision(2) << gb_per_sec
               << " GB/s" << std::flush << std::endl;
 
-    if(do_validation)
+    if(!do_validation)
     {
         return true;
     }
