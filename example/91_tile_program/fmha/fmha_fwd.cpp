@@ -116,6 +116,32 @@ struct fmha_fwd_kernel_invoker
     }
 };
 
+// different threshold for different dtype
+template <typename DataType>
+auto get_elimit(int /*init_method*/)
+{
+    double rtol = 1e-3;
+    double atol = 1e-3;
+    return ck::make_tuple(rtol, atol);
+}
+
+template <>
+auto get_elimit<ck::bhalf_t>(int init_method)
+{
+    if(init_method == 0)
+    {
+        double rtol = 1e-2;
+        double atol = 1e-2;
+        return ck::make_tuple(rtol, atol);
+    }
+    else
+    {
+        double rtol = 3e-3;
+        double atol = 3e-3;
+        return ck::make_tuple(rtol, atol);
+    }
+}
+
 template <typename DataType>
 bool run(const ArgParser& arg_parser)
 {
@@ -427,7 +453,9 @@ bool run(const ArgParser& arg_parser)
         else       o_host_result.ForEach([&](auto& self, auto idx) { self(idx) = o_host(b, idx[1] + query_offset, idx[0], idx[2]); });
         // clang-format on
 
-        bool cur_pass = ck::utils::check_err(o_host_result, o_host_ref);
+        auto [rtol, atol] = get_elimit<DataType>(init_method);
+        bool cur_pass     = ck::utils::check_err(
+            o_host_result, o_host_ref, std::string("Error: Incorrect results!"), rtol, atol);
         pass &= cur_pass;
         if(!cur_pass)
         {
