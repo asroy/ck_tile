@@ -25,7 +25,7 @@
 #include "ck/library/utility/literals.hpp"
 
 #include "common/arg_parser.hpp"
-#include "fmha_fwd_kernel_invoker.hpp"
+#include "fmha_fwd.hpp"
 #include "mask.hpp"
 #include "reference/reference_batched_elementwise.hpp"
 #include "reference/reference_batched_gemm.hpp"
@@ -67,6 +67,54 @@ auto create_args(int argc, char* argv[])
     bool result = arg_parser.parse(argc, argv);
     return std::make_tuple(result, arg_parser);
 }
+
+template <ck::index_t HDim_, typename DataType_>
+struct fmha_fwd_kernel_invoker
+{
+    static constexpr ck::index_t HDim = HDim_;
+    using DataType                    = DataType_;
+    // these args are used to select kernel.
+    // args that may passed as karg shoule use operator()
+    mode_enum mode;
+    bool use_bias;
+    mask_info mask;
+
+    fmha_fwd_kernel_invoker(mode_enum mode_, bool use_bias_, mask_info mask_)
+        : mode(mode_), use_bias(use_bias_), mask(mask_)
+    {
+    }
+
+    template <typename... Args>
+    float operator()(const StreamConfig& stream, Args&&... args)
+    {
+        float ave_time;
+        BOOL_SWITCH_2(mode == mode_enum::group, kIsGroupMode, use_bias, kHasBias, [&] {
+            if(mask.type == mask_enum::no_mask)
+            {
+                using FmhaMask = FmhaMasks::NoMask;
+                using Kernel =
+                    FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
+
+                auto [kargs, grids] =
+                    fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)...);
+                ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
+            }
+            else
+            {
+                BOOL_SWITCH(mask.type == mask_enum::window_generic, kIsLocal, [&]() {
+                    using FmhaMask = ck::tile_program::block::GenericAttentionMask<true, kIsLocal>;
+                    using Kernel =
+                        FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
+
+                    auto [kargs, grids] =
+                        fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)...);
+                    ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
+                });
+            }
+        });
+        return ave_time;
+    }
+};
 
 template <typename DataType>
 bool run(const ArgParser& arg_parser)
@@ -238,7 +286,8 @@ bool run(const ArgParser& arg_parser)
               << ", v:" << std::string(VLayout::name)[0] << std::flush;
 
 #define INVOKE_FMHA_KERNEL(hdim_)                                                                \
-    fmha_fwd_kernel_invoker<hdim_, DataType>{mode, use_bias, mask}(q_buf.GetDeviceBuffer(),      \
+    fmha_fwd_kernel_invoker<hdim_, DataType>{mode, use_bias, mask}(stream_config,                \
+                                                                   q_buf.GetDeviceBuffer(),      \
                                                                    k_buf.GetDeviceBuffer(),      \
                                                                    v_buf.GetDeviceBuffer(),      \
                                                                    bias_buf.GetDeviceBuffer(),   \
@@ -258,8 +307,7 @@ bool run(const ArgParser& arg_parser)
                                                                    i_perm,                       \
                                                                    o_perm,                       \
                                                                    mask.y,                       \
-                                                                   mask.x,                       \
-                                                                   stream_config)
+                                                                   mask.x)
 
     float ave_time = 0;
     if(hdim_q == hdim_v && hdim_q == 64)

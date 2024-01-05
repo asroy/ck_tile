@@ -9,8 +9,6 @@
 #include "ck/tensor/tensor_view.hpp"
 #include "ck/tile_program/tile/tile_window.hpp"
 
-#include "fmha_fwd_kargs.hpp"
-
 // S[seqlen_q, seqlen_k] = Q[seqlen_q, hdim_q] * K[seqlen_k, hdim_q]
 // S'[seqlen_q, seqlen_k] = S[seqlen_q, seqlen_k] * Scale[1]
 // S''[seqlen_q, seqlen_k] = S'[seqlen_q, seqlen_k] + Bias[seqlen_q, seqlen_k]
@@ -41,10 +39,81 @@ struct FmhaFwdKernel
     using FmhaMask                         = ck::remove_cvref_t<typename FmhaPipeline::FmhaMask>;
     static constexpr bool kHasMask         = FmhaMask::IsMasking;
 
-    // using C0MatrixMask = ck::tile_program::block::C0MatrixMask_impl<
-    //     ck::remove_cvref_t<typename FmhaPipeline::FmhaMask>>;
+    template <ck::index_t I> // to avoid duplicated base class prblem, introduce an template arg
+    struct FmhaFwdEmptyKargs
+    {
+    };
 
-    using Kargs = FmhaFwdKargs<kIsGroupMode, kHasBias, kHasMask>;
+    // kargs use aggregate initializer, so no constructor will provided
+    // use inheritance to minimize karg size
+    // user need to use MakeKargs() function to create kargs.
+    struct FmhaFwdCommonKargs
+    {
+        const void* q_ptr;
+        const void* k_ptr;
+        const void* v_ptr;
+        void* o_ptr;
+
+        ck::index_t seqlen_q;
+        ck::index_t seqlen_k;
+        ck::index_t hdim_q;
+        ck::index_t hdim_v;
+
+        // for MQA/GQA, nhead could be different. This parameter is nhead_q / nhead_k
+        // if this param is larger than 1, indicate MQA/GQA case
+        ck::index_t nhead_ratio_qk;
+        float scale;
+
+        ck::index_t stride_q;
+        ck::index_t stride_k;
+        ck::index_t stride_v;
+        ck::index_t stride_o;
+
+        ck::index_t nhead_stride_q;
+        ck::index_t nhead_stride_k;
+        ck::index_t nhead_stride_v;
+        ck::index_t nhead_stride_o;
+    };
+
+    struct FmhaFwdCommonBiasKargs
+    {
+        const void* bias_ptr          = nullptr;
+        ck::index_t stride_bias       = 0;
+        ck::index_t nhead_stride_bias = 0;
+    };
+
+    struct FmhaFwdBatchModeBiasKargs : FmhaFwdCommonBiasKargs
+    {
+        ck::index_t batch_stride_bias = 0;
+    };
+
+    struct FmhaFwdMaskKargs
+    {
+        ck::index_t mask_y, mask_x;
+    };
+
+    struct FmhaFwdBatchModeKargs
+        : FmhaFwdCommonKargs,
+          std::conditional_t<kHasBias, FmhaFwdBatchModeBiasKargs, FmhaFwdEmptyKargs<0>>,
+          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
+    {
+        ck::index_t batch_stride_q;
+        ck::index_t batch_stride_k;
+        ck::index_t batch_stride_v;
+        ck::index_t batch_stride_o;
+    };
+
+    struct FmhaFwdGroupModeKargs
+        : FmhaFwdCommonKargs,
+          std::conditional_t<kHasBias, FmhaFwdCommonBiasKargs, FmhaFwdEmptyKargs<0>>,
+          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
+    {
+        const int32_t* seqstart_q_ptr;
+        const int32_t* seqstart_k_ptr;
+        const int32_t* seqlen_k_ptr;
+    };
+
+    using Kargs = std::conditional_t<kIsGroupMode, FmhaFwdGroupModeKargs, FmhaFwdBatchModeKargs>;
 
     template <bool Cond = !kIsGroupMode>
     __host__ static constexpr std::enable_if_t<Cond, Kargs> MakeKargs(const void* q_ptr,
