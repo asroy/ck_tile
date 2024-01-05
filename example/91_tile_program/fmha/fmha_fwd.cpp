@@ -277,13 +277,17 @@ bool run(const ArgParser& arg_parser)
         if (permute) return std::string("bhsd");
         else return std::string("bshd");
     };
+    auto io_layout = [&](int iperm_, int operm_) {
+        if (iperm_ == operm_) return layout_str(iperm_);
+        else return layout_str(iperm_) + std::string("-") + layout_str(operm_);
+    };
     // clang-format on
+    const std::string prec = arg_parser.get_str("prec");
 
-    std::cout << "[" << mode << "|" << layout_str(i_perm) << "|" << layout_str(o_perm)
-              << "] b:" << batch << ", h:" << nhead << "/" << nhead_k << ", s:" << seqlen_q << "/"
-              << seqlen_k << ", d:" << hdim_q << "/" << hdim_v << ", scale:" << scale
-              << ", bias:" << use_bias << ", mask:" << mask
-              << ", v:" << std::string(VLayout::name)[0] << std::flush;
+    std::cout << "[" << prec << "|" << mode << "|" << io_layout(i_perm, o_perm) << "] b:" << batch
+              << ", h:" << nhead << "/" << nhead_k << ", s:" << seqlen_q << "/" << seqlen_k
+              << ", d:" << hdim_q << "/" << hdim_v << ", scale:" << scale << ", bias:" << use_bias
+              << ", mask:" << mask << ", v:" << std::string(VLayout::name)[0] << std::flush;
 
 #define INVOKE_FMHA_KERNEL(hdim_)                                                                \
     fmha_fwd_kernel_invoker<hdim_, DataType>{mode, use_bias, mask}(stream_config,                \
@@ -330,14 +334,17 @@ bool run(const ArgParser& arg_parser)
 
     std::cout << std::fixed << ", " << std::setprecision(3) << ave_time << " ms, "
               << std::setprecision(2) << tflops << " TFlops, " << std::setprecision(2) << gb_per_sec
-              << " GB/s" << std::flush << std::endl;
+              << " GB/s" << std::flush;
 
     if(!do_validation)
     {
+        std::cout << std::endl;
         return true;
     }
 
     o_buf.FromDevice(o_host.data());
+
+    bool pass = true;
 
     for(ck::index_t wb = 0; wb < batch; ++wb)
     {
@@ -420,7 +427,9 @@ bool run(const ArgParser& arg_parser)
         else       o_host_result.ForEach([&](auto& self, auto idx) { self(idx) = o_host(b, idx[1] + query_offset, idx[0], idx[2]); });
         // clang-format on
 
-        if(!ck::utils::check_err(o_host_result, o_host_ref))
+        bool cur_pass = ck::utils::check_err(o_host_result, o_host_ref);
+        pass &= cur_pass;
+        if(!cur_pass)
         {
             std::cerr << "mismatch found at batch: " << wb << std::endl
                       << "\tseqlen_q: " << real_seqlen_q << std::endl
@@ -428,11 +437,13 @@ bool run(const ArgParser& arg_parser)
                       << "\tseqstart_q: " << seqstart_q_host << std::endl
                       << "\tseqstart_k: " << seqstart_k_host << std::endl;
 
-            return false;
+            break;
         }
     }
 
-    return true;
+    std::cout << ", valid:" << (pass ? "y" : "n") << std::flush << std::endl;
+
+    return pass;
 }
 
 int main(int argc, char* argv[])
