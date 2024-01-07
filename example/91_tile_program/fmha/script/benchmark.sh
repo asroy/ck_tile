@@ -4,8 +4,8 @@ BUILD=build
 EXE=$BUILD/bin/example_fmha_fwd
 VALID=0
 
-for mode in 0 1 ; do  # batch/group
 for prec in "fp16" "bf16" ; do
+for mode in 0 1 ; do  # batch/group
 for perm in 0 1 ; do  # bshd/bhsd
 
 $EXE -prec=$prec -mode=$mode -b=32 -h=16 -d=128 -s=512   -iperm=$perm -operm=$perm -v=$VALID ; sleep 3

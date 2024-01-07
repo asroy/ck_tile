@@ -3,8 +3,8 @@
 BUILD=build
 EXE=$BUILD/bin/example_fmha_fwd
 
-for mode in 0 1 ; do  # batch/group
 for prec in "fp16" "bf16" ; do
+for mode in 0 1 ; do  # batch/group
 for perm in 0 1 ; do  # bshd/bhsd
 for hdim in 128 64 ; do
 for bias in 0 1 ; do  # no-bias/with-bias
