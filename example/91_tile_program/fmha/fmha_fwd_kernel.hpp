@@ -37,7 +37,7 @@ struct FmhaFwdKernel
     static constexpr bool kM0NeedPadding   = FmhaPipeline::kM0NeedPadding;
     static constexpr bool kN0K1NeedPadding = FmhaPipeline::kN0K1NeedPadding;
     static constexpr bool kHasBias         = FmhaPipeline::kHasBias;
-    static constexpr bool kStoreLSE        = true;
+    static constexpr bool kStoreLSE        = FmhaPipeline::kStoreLSE;
     using FmhaMask                         = ck::remove_cvref_t<typename FmhaPipeline::FmhaMask>;
     static constexpr bool kHasMask         = FmhaMask::IsMasking;
 

@@ -57,6 +57,7 @@ struct BlockFmhaPipelineQRKSVSAsync
     static constexpr bool kM0NeedPadding   = Problem::kM0NeedPadding;
     static constexpr bool kN0K1NeedPadding = Problem::kN0K1NeedPadding;
     static constexpr bool kHasBias         = Problem::kHasBias;
+    static constexpr bool kStoreLSE        = Problem::kStoreLSE;
 
     __host__ __device__ static constexpr ck::index_t GetSmemSize()
     {
