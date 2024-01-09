@@ -372,7 +372,7 @@ bool run(const ArgParser& arg_parser)
 
     std::cout << std::fixed << ", " << std::setprecision(3) << ave_time << " ms, "
               << std::setprecision(2) << tflops << " TFlops, " << std::setprecision(2) << gb_per_sec
-              << " GB/s" << std::flush;
+              << " GB/s" << std::flush << std::endl;
 
     if(!do_validation)
     {
@@ -381,6 +381,7 @@ bool run(const ArgParser& arg_parser)
     }
 
     o_buf.FromDevice(o_host.data());
+    lse_buf.FromDevice(lse_host.data());
 
     bool pass = true;
 
@@ -406,6 +407,7 @@ bool run(const ArgParser& arg_parser)
 
         Tensor<SMPLComputeDataType> s_host_ref({nhead, real_seqlen_q, real_seqlen_k});
         Tensor<PDataType> p_host_ref({nhead, real_seqlen_q, real_seqlen_k});
+        Tensor<SMPLComputeDataType> lse_host_ref({nhead, real_seqlen_q, 1});
 
         ck::index_t nr = nhead / nhead_k;
 
@@ -456,7 +458,13 @@ bool run(const ArgParser& arg_parser)
             reference_batched_masking<SaccDataType>(s_host_ref,
                 FmhaMasks::CausalMask{mask.y, mask.x, real_seqlen_q, real_seqlen_k});
         }
-        reference_batched_softmax<SMPLComputeDataType, SMPLComputeDataType, PDataType>(s_host_ref, p_host_ref);
+        if(store_lse){
+            reference_batched_softmax<SMPLComputeDataType, SMPLComputeDataType, PDataType>(s_host_ref, p_host_ref, &lse_host_ref);
+        }
+        else{
+            reference_batched_softmax<SMPLComputeDataType, SMPLComputeDataType, PDataType>(s_host_ref, p_host_ref);
+        }
+        
         reference_batched_gemm<PDataType, VDataType, OaccDataType, ODataType>(p_host_ref, v_host_ref, o_host_ref);
 
         Tensor<ODataType> o_host_result({nhead, real_seqlen_q, hdim_v});
@@ -479,9 +487,30 @@ bool run(const ArgParser& arg_parser)
 
             break;
         }
+
+        if(store_lse)
+        {
+
+            Tensor<SMPLComputeDataType> lse_host_result({nhead, real_seqlen_q, 1});
+            lse_host_result.ForEach([&](auto& self, auto idx) {
+                self(idx) = lse_host(b, idx[0], idx[1] + query_offset, idx[2]);
+            });
+
+            std::cout << "batch: " << wb << " lse : ";
+            if(ck::utils::check_err(
+                   lse_host_result, lse_host_ref, "Error: Incorrect results!", rtol, atol))
+            {
+                std::cout << "pass" << std::endl;
+            }
+            else
+            {
+                std::cout << "fail" << std::endl;
+                pass = 0;
+            }
+        }
     }
 
-    std::cout << ", valid:" << (pass ? "y" : "n") << std::flush << std::endl;
+    std::cout << "check valid:" << (pass ? "y" : "n") << std::flush << std::endl;
 
     return pass;
 }
