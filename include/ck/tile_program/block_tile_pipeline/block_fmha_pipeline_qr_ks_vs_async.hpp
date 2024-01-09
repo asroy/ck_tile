@@ -192,7 +192,7 @@ struct BlockFmhaPipelineQRKSVSAsync
             {
                 // Note: here occ are all cleard, return it
                 // Note: q loaded but no fence, ignore it.
-                return o_acc;
+                return ck::make_tuple(o_acc, m, l);
             }
         }
 
@@ -525,7 +525,7 @@ struct BlockFmhaPipelineQRKSVSAsync
             });
         });
 
-        return o_acc;
+        return ck::make_tuple(o_acc, m, l);
     }
 
     template <typename QDramBlockWindowTmp,
