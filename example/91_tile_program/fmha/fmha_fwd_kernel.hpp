@@ -36,6 +36,7 @@ struct FmhaFwdKernel
     static constexpr bool kM0NeedPadding   = FmhaPipeline::kM0NeedPadding;
     static constexpr bool kN0K1NeedPadding = FmhaPipeline::kN0K1NeedPadding;
     static constexpr bool kHasBias         = FmhaPipeline::kHasBias;
+    static constexpr bool kStoreLSE        = true;
     using FmhaMask                         = ck::remove_cvref_t<typename FmhaPipeline::FmhaMask>;
     static constexpr bool kHasMask         = FmhaMask::IsMasking;
 
@@ -92,10 +93,23 @@ struct FmhaFwdKernel
         ck::index_t mask_y, mask_x;
     };
 
+    struct FmhaFwdCommonLSEKargs
+    {
+        const void* lse_ptr          = nullptr;
+        ck::index_t stride_lse       = 0;
+        ck::index_t nhead_stride_lse = 0;
+    };
+
+    struct FmhaFwdBatchModeLSEKargs : FmhaFwdCommonLSEKargs
+    {
+        ck::index_t batch_stride_lse = 0;
+    };
+
     struct FmhaFwdBatchModeKargs
         : FmhaFwdCommonKargs,
           std::conditional_t<kHasBias, FmhaFwdBatchModeBiasKargs, FmhaFwdEmptyKargs<0>>,
-          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
+          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>,
+          std::conditional_t<kStoreLSE, FmhaFwdBatchModeLSEKargs, FmhaFwdEmptyKargs<2>>
     {
         ck::index_t batch_stride_q;
         ck::index_t batch_stride_k;
@@ -106,7 +120,8 @@ struct FmhaFwdKernel
     struct FmhaFwdGroupModeKargs
         : FmhaFwdCommonKargs,
           std::conditional_t<kHasBias, FmhaFwdCommonBiasKargs, FmhaFwdEmptyKargs<0>>,
-          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
+          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>,
+          std::conditional_t<kStoreLSE, FmhaFwdCommonLSEKargs, FmhaFwdEmptyKargs<2>>
     {
         const int32_t* seqstart_q_ptr;
         const int32_t* seqstart_k_ptr;
@@ -120,6 +135,7 @@ struct FmhaFwdKernel
                                                                       const void* k_ptr,
                                                                       const void* v_ptr,
                                                                       const void* bias_ptr,
+                                                                      void* lse_ptr,
                                                                       void* o_ptr,
                                                                       ck::index_t seqlen_q,
                                                                       ck::index_t seqlen_k,
@@ -131,16 +147,19 @@ struct FmhaFwdKernel
                                                                       ck::index_t stride_k,
                                                                       ck::index_t stride_v,
                                                                       ck::index_t stride_bias,
+                                                                      ck::index_t stride_lse,
                                                                       ck::index_t stride_o,
                                                                       ck::index_t nhead_stride_q,
                                                                       ck::index_t nhead_stride_k,
                                                                       ck::index_t nhead_stride_v,
                                                                       ck::index_t nhead_stride_bias,
+                                                                      ck::index_t nhead_stride_lse,
                                                                       ck::index_t nhead_stride_o,
                                                                       ck::index_t batch_stride_q,
                                                                       ck::index_t batch_stride_k,
                                                                       ck::index_t batch_stride_v,
                                                                       ck::index_t batch_stride_bias,
+                                                                      ck::index_t batch_stride_lse,
                                                                       ck::index_t batch_stride_o,
                                                                       ck::index_t mask_y,
                                                                       ck::index_t mask_x)
@@ -169,6 +188,7 @@ struct FmhaFwdKernel
                      nhead_stride_o}, // args for common karg
                     {},               // placeholder for bias
                     {},               // placeholder for mask
+                    {},               // placeholder for lse
                     batch_stride_q,
                     batch_stride_k,
                     batch_stride_v,
@@ -187,6 +207,13 @@ struct FmhaFwdKernel
             kargs.mask_y = mask_y;
             kargs.mask_x = mask_x;
         }
+        if constexpr(kStoreLSE)
+        {
+            kargs.lse_ptr          = lse_ptr;
+            kargs.stride_lse       = stride_lse;
+            kargs.nhead_stride_lse = nhead_stride_lse;
+            kargs.batch_stride_lse = batch_stride_lse;
+        }
 
         return kargs;
     }
@@ -196,6 +223,7 @@ struct FmhaFwdKernel
                                                                       const void* k_ptr,
                                                                       const void* v_ptr,
                                                                       const void* bias_ptr,
+                                                                      void* lse_ptr,
                                                                       void* o_ptr,
                                                                       const void* seqstart_q_ptr,
                                                                       const void* seqstart_k_ptr,
@@ -208,11 +236,13 @@ struct FmhaFwdKernel
                                                                       ck::index_t stride_k,
                                                                       ck::index_t stride_v,
                                                                       ck::index_t stride_bias,
+                                                                      ck::index_t stride_lse,
                                                                       ck::index_t stride_o,
                                                                       ck::index_t nhead_stride_q,
                                                                       ck::index_t nhead_stride_k,
                                                                       ck::index_t nhead_stride_v,
                                                                       ck::index_t nhead_stride_bias,
+                                                                      ck::index_t nhead_stride_lse,
                                                                       ck::index_t nhead_stride_o,
                                                                       ck::index_t mask_y,
                                                                       ck::index_t mask_x)
@@ -241,6 +271,7 @@ struct FmhaFwdKernel
                      nhead_stride_o}, // args for common karg
                     {},               // placeholder for bias
                     {},               // placeholder for mask
+                    {},               // placeholder for lse
                     reinterpret_cast<const int32_t*>(seqstart_q_ptr),
                     reinterpret_cast<const int32_t*>(seqstart_k_ptr),
                     reinterpret_cast<const int32_t*>(seqlen_k_ptr)};
@@ -255,6 +286,12 @@ struct FmhaFwdKernel
         {
             kargs.mask_y = mask_y;
             kargs.mask_x = mask_x;
+        }
+        if constexpr(kStoreLSE)
+        {
+            kargs.lse_ptr          = lse_ptr;
+            kargs.stride_lse       = stride_lse;
+            kargs.nhead_stride_lse = nhead_stride_lse;
         }
 
         return kargs;

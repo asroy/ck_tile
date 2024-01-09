@@ -55,6 +55,7 @@ auto create_args(int argc, char* argv[])
                 "if true, will be b*h*s*d, else b*s*h*d")
         .insert("operm", "1", "permute output")
         .insert("bias", "0", "add bias or not")
+        .insert("lse", "1", "0 not store lse, 1 store lse")
         .insert("prec", "fp16", "data type. fp16 or bf16")
         .insert("mask",
                 "0",
@@ -177,6 +178,8 @@ bool run(const ArgParser& arg_parser)
 
     bool use_bias = arg_parser.get_uint32("bias");
 
+    bool store_lse = arg_parser.get_uint32("lse");
+
     mask_info mask = decode_mask_info(arg_parser.get_str("mask"), seqlen_q, seqlen_k);
 
     int init_method = arg_parser.get_int("init");
@@ -196,6 +199,7 @@ bool run(const ArgParser& arg_parser)
     using KDataType           = typename TypeConfig::KDataType;
     using VDataType           = typename TypeConfig::VDataType;
     using BiasDataType        = typename TypeConfig::BiasDataType;
+    using LSEDataType         = typename TypeConfig::LSEDataType;
     using SaccDataType        = typename TypeConfig::SaccDataType;
     using SMPLComputeDataType = typename TypeConfig::SMPLComputeDataType;
     using PDataType           = typename TypeConfig::PDataType;
@@ -259,6 +263,11 @@ bool run(const ArgParser& arg_parser)
     Tensor<KDataType> bias_host(
         use_bias ? get_lengths(i_perm, 1, 1, shape_seqlen_q, shape_seqlen_k)
                  : std::array<ck::index_t, 4>{1, 1, 1, 1} /* dummy shape for simplifying code */);
+    // self define lse data layout as [shape_batch, nhead, shape_seqlen_q, 1]
+    Tensor<LSEDataType> lse_host(
+        store_lse ? std::array<ck::index_t, 4>{shape_batch, nhead, shape_seqlen_q, 1}
+                  : std::array<ck::index_t, 4>{1, 1, 1, 1} /* dummy shape for simplifying code */);
+
     Tensor<ODataType> o_host(get_lengths(o_perm, shape_batch, nhead, shape_seqlen_q, hdim_v));
 
     if(init_method == 0)
@@ -287,6 +296,7 @@ bool run(const ArgParser& arg_parser)
     DeviceMem k_buf(k_host.GetElementSpaceSizeInBytes());
     DeviceMem v_buf(v_host.GetElementSpaceSizeInBytes());
     DeviceMem bias_buf(bias_host.GetElementSpaceSizeInBytes());
+    DeviceMem lse_buf(lse_host.GetElementSpaceSizeInBytes());
     DeviceMem o_buf(o_host.GetElementSpaceSizeInBytes());
     DeviceMem seqstart_q(seqstart_q_host.size() * sizeof(int32_t));
     DeviceMem seqstart_k(seqstart_k_host.size() * sizeof(int32_t));
@@ -313,7 +323,8 @@ bool run(const ArgParser& arg_parser)
     std::cout << "[" << prec << "|" << mode << "|" << io_layout(i_perm, o_perm) << "] b:" << batch
               << ", h:" << nhead << "/" << nhead_k << ", s:" << seqlen_q << "/" << seqlen_k
               << ", d:" << hdim_q << "/" << hdim_v << ", scale:" << scale << ", bias:" << use_bias
-              << ", mask:" << mask << ", v:" << std::string(VLayout::name)[0] << std::flush;
+              << ", lse:" << store_lse << ", mask:" << mask
+              << ", v:" << std::string(VLayout::name)[0] << std::flush;
 
 #define INVOKE_FMHA_KERNEL(hdim_)                                                                \
     fmha_fwd_kernel_invoker<hdim_, DataType>{mode, use_bias, mask}(stream_config,                \
@@ -321,6 +332,7 @@ bool run(const ArgParser& arg_parser)
                                                                    k_buf.GetDeviceBuffer(),      \
                                                                    v_buf.GetDeviceBuffer(),      \
                                                                    bias_buf.GetDeviceBuffer(),   \
+                                                                   lse_buf.GetDeviceBuffer(),    \
                                                                    o_buf.GetDeviceBuffer(),      \
                                                                    seqstart_q.GetDeviceBuffer(), \
                                                                    seqstart_k.GetDeviceBuffer(), \
