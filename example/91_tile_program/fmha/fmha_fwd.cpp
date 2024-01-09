@@ -78,10 +78,11 @@ struct fmha_fwd_kernel_invoker
     // args that may passed as karg shoule use operator()
     mode_enum mode;
     bool use_bias;
+    bool store_lse;
     mask_info mask;
 
-    fmha_fwd_kernel_invoker(mode_enum mode_, bool use_bias_, mask_info mask_)
-        : mode(mode_), use_bias(use_bias_), mask(mask_)
+    fmha_fwd_kernel_invoker(mode_enum mode_, bool use_bias_, bool store_lse_, mask_info mask_)
+        : mode(mode_), use_bias(use_bias_), store_lse(store_lse_), mask(mask_)
     {
     }
 
@@ -89,30 +90,40 @@ struct fmha_fwd_kernel_invoker
     float operator()(const StreamConfig& stream, Args&&... args)
     {
         float ave_time;
-        BOOL_SWITCH_2(mode == mode_enum::group, kIsGroupMode, use_bias, kHasBias, [&] {
-            if(mask.type == mask_enum::no_mask)
-            {
-                using FmhaMask = FmhaMasks::NoMask;
-                using Kernel =
-                    FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
-
-                auto [kargs, grids] =
-                    fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)...);
-                ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
-            }
-            else
-            {
-                BOOL_SWITCH(mask.type == mask_enum::window_generic, kIsLocal, [&]() {
-                    using FmhaMask = ck::tile_program::block::GenericAttentionMask<true, kIsLocal>;
-                    using Kernel =
-                        FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
+        BOOL_SWITCH_3(
+            mode == mode_enum::group, kIsGroupMode, use_bias, kHasBias, store_lse, kStoreLSE, [&] {
+                if(mask.type == mask_enum::no_mask)
+                {
+                    using FmhaMask = FmhaMasks::NoMask;
+                    using Kernel   = FmhaFwdKernelSelector<HDim,
+                                                         DataType,
+                                                         kIsGroupMode,
+                                                         FmhaMask,
+                                                         kHasBias,
+                                                         kStoreLSE>;
 
                     auto [kargs, grids] =
                         fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)...);
                     ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
-                });
-            }
-        });
+                }
+                else
+                {
+                    BOOL_SWITCH(mask.type == mask_enum::window_generic, kIsLocal, [&]() {
+                        using FmhaMask =
+                            ck::tile_program::block::GenericAttentionMask<true, kIsLocal>;
+                        using Kernel = FmhaFwdKernelSelector<HDim,
+                                                             DataType,
+                                                             kIsGroupMode,
+                                                             FmhaMask,
+                                                             kHasBias,
+                                                             kStoreLSE>;
+
+                        auto [kargs, grids] =
+                            fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)...);
+                        ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
+                    });
+                }
+            });
         return ave_time;
     }
 };
@@ -326,30 +337,31 @@ bool run(const ArgParser& arg_parser)
               << ", lse:" << store_lse << ", mask:" << mask
               << ", v:" << std::string(VLayout::name)[0] << std::flush;
 
-#define INVOKE_FMHA_KERNEL(hdim_)                                                                \
-    fmha_fwd_kernel_invoker<hdim_, DataType>{mode, use_bias, mask}(stream_config,                \
-                                                                   q_buf.GetDeviceBuffer(),      \
-                                                                   k_buf.GetDeviceBuffer(),      \
-                                                                   v_buf.GetDeviceBuffer(),      \
-                                                                   bias_buf.GetDeviceBuffer(),   \
-                                                                   lse_buf.GetDeviceBuffer(),    \
-                                                                   o_buf.GetDeviceBuffer(),      \
-                                                                   seqstart_q.GetDeviceBuffer(), \
-                                                                   seqstart_k.GetDeviceBuffer(), \
-                                                                   nullptr,                      \
-                                                                   batch,                        \
-                                                                   nhead,                        \
-                                                                   nhead_k,                      \
-                                                                   shape_seqlen_q,               \
-                                                                   shape_seqlen_k,               \
-                                                                   hdim_q,                       \
-                                                                   hdim_v,                       \
-                                                                   max_seqlen_q,                 \
-                                                                   scale,                        \
-                                                                   i_perm,                       \
-                                                                   o_perm,                       \
-                                                                   mask.y,                       \
-                                                                   mask.x)
+#define INVOKE_FMHA_KERNEL(hdim_)                                              \
+    fmha_fwd_kernel_invoker<hdim_, DataType>{mode, use_bias, store_lse, mask}( \
+        stream_config,                                                         \
+        q_buf.GetDeviceBuffer(),                                               \
+        k_buf.GetDeviceBuffer(),                                               \
+        v_buf.GetDeviceBuffer(),                                               \
+        bias_buf.GetDeviceBuffer(),                                            \
+        lse_buf.GetDeviceBuffer(),                                             \
+        o_buf.GetDeviceBuffer(),                                               \
+        seqstart_q.GetDeviceBuffer(),                                          \
+        seqstart_k.GetDeviceBuffer(),                                          \
+        nullptr,                                                               \
+        batch,                                                                 \
+        nhead,                                                                 \
+        nhead_k,                                                               \
+        shape_seqlen_q,                                                        \
+        shape_seqlen_k,                                                        \
+        hdim_q,                                                                \
+        hdim_v,                                                                \
+        max_seqlen_q,                                                          \
+        scale,                                                                 \
+        i_perm,                                                                \
+        o_perm,                                                                \
+        mask.y,                                                                \
+        mask.x)
 
     float ave_time = 0;
     if(hdim_q == hdim_v && hdim_q == 64)

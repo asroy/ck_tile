@@ -28,7 +28,7 @@ struct FmhaFwdKernel
     using KDataType    = ck::remove_cvref_t<typename FmhaPipeline::KDataType>;
     using VDataType    = ck::remove_cvref_t<typename FmhaPipeline::VDataType>;
     using BiasDataType = ck::remove_cvref_t<typename FmhaPipeline::BiasDataType>;
-    using LSEDataType  = float;
+    using LSEDataType  = ck::remove_cvref_t<typename FmhaPipeline::LSEDataType>;
     using ODataType    = ck::remove_cvref_t<typename FmhaPipeline::ODataType>;
 
     using VLayout = ck::remove_cvref_t<typename FmhaPipeline::VLayout>;

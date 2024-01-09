@@ -104,13 +104,19 @@ struct FmhaShape</* HDim = */ 128>
 {
 };
 
-template <ck::index_t HDim, bool kHasBias>
+template <ck::index_t HDim, bool kHasBias, bool kStoreLSE>
 using FmhaTraits = ck::tile_program::TileFmhaTraits<kM0NeedPadding,
                                                     kN0K1NeedPadding,
                                                     kHasBias,
+                                                    kStoreLSE,
                                                     HDim == 64 ? /* occupancy = */ 3 : 2>;
 
-template <ck::index_t HDim, typename DataType, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
+template <ck::index_t HDim,
+          typename DataType,
+          bool kIsGroupMode,
+          typename FmhaMask,
+          bool kHasBias,
+          bool kStoreLSE>
 using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<
     typename FmhaFwdTypeConfig<DataType>::QDataType,
     typename FmhaFwdTypeConfig<DataType>::KDataType,
@@ -118,6 +124,7 @@ using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<
     typename FmhaFwdTypeConfig<DataType>::SaccDataType,
     typename FmhaFwdTypeConfig<DataType>::SMPLComputeDataType,
     typename FmhaFwdTypeConfig<DataType>::BiasDataType,
+    typename FmhaFwdTypeConfig<DataType>::LSEDataType,
     typename FmhaFwdTypeConfig<DataType>::PDataType,
     typename FmhaFwdTypeConfig<DataType>::OaccDataType,
     typename FmhaFwdTypeConfig<DataType>::ODataType,
@@ -125,21 +132,31 @@ using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<
     FmhaShape<HDim>,
     kIsGroupMode,
     FmhaMask,
-    FmhaTraits<HDim, kHasBias>>;
+    FmhaTraits<HDim, kHasBias, kStoreLSE>>;
 
-template <ck::index_t HDim, typename DataType, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
+template <ck::index_t HDim,
+          typename DataType,
+          bool kIsGroupMode,
+          typename FmhaMask,
+          bool kHasBias,
+          bool kStoreLSE>
 using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync<
-    FmhaPipelineProblem<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>>;
+    FmhaPipelineProblem<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias, kStoreLSE>>;
 
 template <typename DataType>
 using FmhaEpilogue =
     FmhaFwdEpilogue<FmhaFwdEpilogueProblem<typename FmhaFwdTypeConfig<DataType>::OaccDataType,
                                            typename FmhaFwdTypeConfig<DataType>::ODataType>>;
 
-template <ck::index_t HDim, typename DataType, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
+template <ck::index_t HDim,
+          typename DataType,
+          bool kIsGroupMode,
+          typename FmhaMask,
+          bool kHasBias,
+          bool kStoreLSE>
 using FmhaFwdKernelSelector =
     FmhaFwdKernel<FmhaFwdTilePartitioner<FmhaShape<HDim>>,
-                  FmhaPipeline<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>,
+                  FmhaPipeline<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias, kStoreLSE>,
                   FmhaEpilogue<DataType>>;
 
 // Kernel API
