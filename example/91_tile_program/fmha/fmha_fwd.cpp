@@ -524,7 +524,7 @@ bool run(const ArgParser& arg_parser)
         }
     }
 
-    std::cout << "check valid:" << (pass ? "y" : "n") << std::flush << std::endl;
+    std::cout << ", valid:" << (pass ? "y" : "n") << std::flush << std::endl;
 
     return pass;
 }
