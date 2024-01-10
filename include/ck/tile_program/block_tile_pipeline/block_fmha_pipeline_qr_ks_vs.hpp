@@ -68,10 +68,11 @@ struct BlockFmhaPipelineQRKSVS
               typename KDramBlockWindowTmp,
               typename VDramBlockWindowTmp,
               typename BiasDramBlockWindowTmp,
+              typename LSEDramBlockWindowTmp,
               typename QElementFunction,
               typename KElementFunction,
               typename VElementFunction,
-              typename BiasElementFunction>
+              typename BiasElementFunction typename LSEElementFunction>
     __host__ __device__ auto
     operator()(const QDramBlockWindowTmp& q_dram_block_window_tmp, // M0*K0 tile
                const QElementFunction& q_element_func,
@@ -81,6 +82,8 @@ struct BlockFmhaPipelineQRKSVS
                const VElementFunction& v_element_func,
                const BiasDramBlockWindowTmp& bias_dram_block_window_tmp, // M0*N0 tile
                const BiasElementFunction& bias_element_func,
+               LSEDramBlockWindowTmp& lse_dram_window_tmp, // M0*1 tile
+               const LSEElementFunction& lse_element_func,
                FmhaMask mask,
                float scale,
                void* smem_ptr) const
@@ -164,7 +167,7 @@ struct BlockFmhaPipelineQRKSVS
             {
                 // Note: here occ are all cleard, return it
                 // Note: q loaded but no fence, ignore it.
-                return ck::make_tuple(o_acc, m, l);
+                return o_acc;
             }
         }
 
@@ -430,6 +433,31 @@ struct BlockFmhaPipelineQRKSVS
             }
         } while(++i_total_loops < num_total_loop);
 
+        // store lse
+        if constexpr(kStoreLSE)
+        {
+            auto lse = make_static_distributed_tensor<LSEDataType>(m.GetTileDistribution());
+
+            constexpr auto lse_spans = decltype(lse)::GetDistributedSpans();
+            sweep_tile_span(lse_spans[Number<0>{}], [&, m_ = m, l_ = l](auto idx0) {
+                constexpr auto i_idx = make_tuple(idx0);
+#if CK_FMHA_FWD_FAST_EXP2
+                if constexpr(is_null_tile_window(bias_dram_window))
+                {
+                    lse(i_idx) = m_[i_idx] * scale / C_LOG2E + math::log(l_[i_idx]);
+                }
+                else
+                {
+                    lse(i_idx) = m_[i_idx] / C_LOG2E + math::log(l_[i_idx]);
+                }
+#else
+                lse(i_idx) = m_[i_idx] + math::log(l_[i_idx]);
+#endif
+            });
+
+            store_tile(lse_dram_window_tmp, tile_elementwise_in(lse_element_func, lse));
+        }
+
         // finally, O
         constexpr auto o_spans = decltype(o_acc)::GetDistributedSpans();
 
@@ -449,18 +477,20 @@ struct BlockFmhaPipelineQRKSVS
             });
         });
 
-        return ck::make_tuple(o_acc, m, l);
+        return o_acc;
     }
 
     template <typename QDramBlockWindowTmp,
               typename KDramBlockWindowTmp,
               typename VDramBlockWindowTmp,
-              typename BiasDramBlockWindowTmp>
+              typename BiasDramBlockWindowTmp,
+              typename LSEDramBlockWindowTmp>
     __host__ __device__ auto
     operator()(const QDramBlockWindowTmp& q_dram_block_window_tmp,       // M0*K0 tile
                const KDramBlockWindowTmp& k_dram_block_window_tmp,       // N0*K0 tile
                const VDramBlockWindowTmp& v_dram_block_window_tmp,       // N1*K1 tile
                const BiasDramBlockWindowTmp& bias_dram_block_window_tmp, // M0*N0 tile
+               LSEDramBlockWindowTmp& lse_dram_block_window_tmp,         // M0*1 tile
                FmhaMask mask,
                float scale,
                void* smem_ptr) const
@@ -472,6 +502,8 @@ struct BlockFmhaPipelineQRKSVS
                           v_dram_block_window_tmp,
                           identity{},
                           bias_dram_block_window_tmp,
+                          identity{},
+                          lse_dram_block_window_tmp,
                           identity{},
                           mask,
                           scale,

@@ -551,6 +551,35 @@ struct FmhaFwdKernel
             }
         }();
 
+        // lse
+        auto lse_dram_window = [&, i_nhead_ = i_nhead]() {
+            constexpr auto lse_dram_window_lengths = make_tuple(Number<FmhaPipeline::kM0>{});
+            if constexpr(kStoreLSE)
+            {
+                LSEDataType* lse_ptr =
+                    reinterpret_cast<LSEDataType*>(kargs.lse_ptr) +
+                    static_cast<long_index_t>(i_nhead_) * kargs.nhead_stride_lse + batch_offset_lse;
+
+                const auto lse_dram = [&]() {
+                    const auto lse_dram_naive =
+                        make_naive_tensor_view<AddressSpaceEnum::Global>(lse_ptr,
+                                                                         make_tuple(kargs.seqlen_q),
+                                                                         make_tuple(1),
+                                                                         Number<1>{},
+                                                                         Number<1>{});
+
+                    return pad_tensor_view(
+                        lse_dram_naive, lse_dram_window_lengths, Sequence<kM0NeedPadding>{});
+                }();
+
+                return make_tile_window(lse_dram, lse_dram_window_lengths, {i_m0});
+            }
+            else
+            {
+                return make_null_tile_window(lse_dram_window_lengths);
+            }
+        }();
+
         FmhaMask mask = [&]() {
             if constexpr(kHasMask)
                 return FmhaMask{kargs.mask_y, kargs.mask_x, kargs.seqlen_q, kargs.seqlen_k};
@@ -558,11 +587,12 @@ struct FmhaFwdKernel
                 return FmhaMask{kargs.seqlen_q, kargs.seqlen_k};
         }();
 
-        auto [o_acc_tile, m, l] =
+        auto o_acc_tile =
             FmhaPipeline{}(q_dram_window,
                            k_dram_window,
                            v_dram_window,
                            bias_dram_window,
+                           lse_dram_window,
                            mask,
                            kargs.scale,
                            // ck::math::integer_divide_ceil(kargs.seqlen_k, FmhaPipeline::kN0),
@@ -589,58 +619,5 @@ struct FmhaFwdKernel
                              {i_m0, i_n1});
 
         EpiloguePipeline{}(o_dram_window, o_acc_tile);
-
-        // lse ptr desc
-        if constexpr(kStoreLSE)
-        {
-            if(kargs.lse_ptr)
-            {
-                auto lse_dram_window = [&, i_nhead_ = i_nhead]() {
-                    constexpr auto lse_dram_window_lengths =
-                        make_tuple(Number<FmhaPipeline::kM0>{});
-
-                    LSEDataType* lse_ptr =
-                        reinterpret_cast<LSEDataType*>(kargs.lse_ptr) +
-                        static_cast<long_index_t>(i_nhead_) * kargs.nhead_stride_lse +
-                        batch_offset_lse;
-
-                    const auto lse_dram = [&]() {
-                        const auto lse_dram_naive =
-                            make_naive_tensor_view<AddressSpaceEnum::Global>(
-                                lse_ptr,
-                                make_tuple(kargs.seqlen_q),
-                                make_tuple(1),
-                                Number<1>{},
-                                Number<1>{});
-
-                        return pad_tensor_view(
-                            lse_dram_naive, lse_dram_window_lengths, Sequence<kM0NeedPadding>{});
-                    }();
-
-                    return make_tile_window(lse_dram, lse_dram_window_lengths, {i_m0});
-                }();
-
-                auto lse = make_static_distributed_tensor<LSEDataType>(m.GetTileDistribution());
-
-                constexpr auto lse_spans = decltype(lse)::GetDistributedSpans();
-                sweep_tile_span(lse_spans[Number<0>{}], [&, m_ = m, l_ = l](auto idx0) {
-                    constexpr auto i_idx = make_tuple(idx0);
-#if CK_FMHA_FWD_FAST_EXP2
-                    if constexpr(is_null_tile_window(bias_dram_window))
-                    {
-                        lse(i_idx) = m_[i_idx] * kargs.scale / C_LOG2E + math::log(l_[i_idx]);
-                    }
-                    else
-                    {
-                        lse(i_idx) = m_[i_idx] / C_LOG2E + math::log(l_[i_idx]);
-                    }
-#else
-                        lse(i_idx) = m_[i_idx] + math::log(l_[i_idx]);
-#endif
-                });
-
-                store_tile(lse_dram_window, lse);
-            }
-        }
     }
 };
