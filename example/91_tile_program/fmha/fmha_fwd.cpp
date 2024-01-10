@@ -340,11 +340,15 @@ bool run(const ArgParser& arg_parser)
                                                                    mask.x)
 
     float ave_time = 0;
-    if(hdim_q == hdim_v && hdim_q == 64)
+    if(hdim_q <= 32 && hdim_v <= 32)
+    {
+        ave_time = INVOKE_FMHA_KERNEL(32);
+    }
+    else if(hdim_q <= 64 && hdim_v <= 64)
     {
         ave_time = INVOKE_FMHA_KERNEL(64);
     }
-    else if(hdim_q == hdim_v && hdim_q == 128)
+    else if(hdim_q <= 128 && hdim_v <= 128)
     {
         ave_time = INVOKE_FMHA_KERNEL(128);
     }
