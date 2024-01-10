@@ -72,7 +72,8 @@ struct BlockFmhaPipelineQRKSVS
               typename QElementFunction,
               typename KElementFunction,
               typename VElementFunction,
-              typename BiasElementFunction typename LSEElementFunction>
+              typename BiasElementFunction,
+              typename LSEElementFunction>
     __host__ __device__ auto
     operator()(const QDramBlockWindowTmp& q_dram_block_window_tmp, // M0*K0 tile
                const QElementFunction& q_element_func,

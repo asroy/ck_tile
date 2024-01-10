@@ -384,7 +384,7 @@ bool run(const ArgParser& arg_parser)
 
     std::cout << std::fixed << ", " << std::setprecision(3) << ave_time << " ms, "
               << std::setprecision(2) << tflops << " TFlops, " << std::setprecision(2) << gb_per_sec
-              << " GB/s" << std::flush << std::endl;
+              << " GB/s" << std::flush;
 
     if(!do_validation)
     {
@@ -487,11 +487,11 @@ bool run(const ArgParser& arg_parser)
 
         auto [rtol, atol] = get_elimit<DataType>(init_method);
         bool cur_pass     = ck::utils::check_err(
-            o_host_result, o_host_ref, std::string("Error: Incorrect results!"), rtol, atol);
+            o_host_result, o_host_ref, std::string("O Error: Incorrect results!"), rtol, atol);
         pass &= cur_pass;
         if(!cur_pass)
         {
-            std::cerr << "mismatch found at batch: " << wb << std::endl
+            std::cerr << "O mismatch found at batch: " << wb << std::endl
                       << "\tseqlen_q: " << real_seqlen_q << std::endl
                       << "\tseqlen_k: " << real_seqlen_k << std::endl
                       << "\tseqstart_q: " << seqstart_q_host << std::endl
@@ -502,22 +502,24 @@ bool run(const ArgParser& arg_parser)
 
         if(store_lse)
         {
-
             Tensor<SMPLComputeDataType> lse_host_result({nhead, real_seqlen_q, 1});
             lse_host_result.ForEach([&](auto& self, auto idx) {
                 self(idx) = lse_host(b, idx[0], idx[1] + query_offset, idx[2]);
             });
 
-            std::cout << "batch: " << wb << " lse : ";
-            if(ck::utils::check_err(
-                   lse_host_result, lse_host_ref, "Error: Incorrect results!", rtol, atol))
+            bool lse_pass = ck::utils::check_err(
+                lse_host_result, lse_host_ref, "LSE Error: Incorrect results!", rtol, atol);
+
+            pass &= lse_pass;
+            if(!cur_pass)
             {
-                std::cout << "pass" << std::endl;
-            }
-            else
-            {
-                std::cout << "fail" << std::endl;
-                pass = 0;
+                std::cerr << "LSE mismatch found at batch: " << wb << std::endl
+                          << "\tseqlen_q: " << real_seqlen_q << std::endl
+                          << "\tseqlen_k: " << real_seqlen_k << std::endl
+                          << "\tseqstart_q: " << seqstart_q_host << std::endl
+                          << "\tseqstart_k: " << seqstart_k_host << std::endl;
+
+                break;
             }
         }
     }
