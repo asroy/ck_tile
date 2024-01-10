@@ -122,7 +122,7 @@ using FmhaTraits = ck::tile_program::TileFmhaTraits<kM0NeedPadding,
                                                     kN0K1NeedPadding,
                                                     kK0N1NeedPadding,
                                                     kHasBias,
-                                                    HDim <= 64 ? /* occupancy = */ 3 : 2>;
+                                                    HDim == 64 ? /* occupancy = */ 3 : 2>;
 
 template <ck::index_t HDim, typename DataType, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
 using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<
