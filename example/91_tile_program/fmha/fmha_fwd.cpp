@@ -340,22 +340,22 @@ bool run(const ArgParser& arg_parser)
                                                                    mask.y,                       \
                                                                    mask.x)
 
-    float ave_time       = 0;
-    const auto check_dim = [](ck::index_t hdim_q_, ck::index_t hdim_v_, ck::index_t threshold) {
+    float ave_time         = 0;
+    const auto check_hdims = [](ck::index_t hdim_q_, ck::index_t hdim_v_, ck::index_t threshold) {
         const auto compare =
-            std::conditional_t<kK0N1NeedPadding, std::less_equal<>, std::equal_to<>>{};
+            std::conditional_t<kK0N1NeedPadding, std::less_equal<>, std::equal<>>{};
         return compare(hdim_q_, threshold) && compare(hdim_v_, threshold);
     };
 
-    if(check_dim(hdim_q, hdim_v, 32))
+    if(check_hdims(hdim_q, hdim_v, 32))
     {
         ave_time = INVOKE_FMHA_KERNEL(32);
     }
-    else if(check_dim(hdim_q, hdim_v, 64))
+    else if(check_hdims(hdim_q, hdim_v, 64))
     {
         ave_time = INVOKE_FMHA_KERNEL(64);
     }
-    else if(check_dim(hdim_q, hdim_v, 128))
+    else if(check_hdims(hdim_q, hdim_v, 128))
     {
         ave_time = INVOKE_FMHA_KERNEL(128);
     }
