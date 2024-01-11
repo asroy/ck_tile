@@ -274,10 +274,10 @@ bool run(const ArgParser& arg_parser)
     Tensor<KDataType> bias_host(
         use_bias ? get_lengths(i_perm, 1, 1, shape_seqlen_q, shape_seqlen_k)
                  : std::array<ck::index_t, 4>{1, 1, 1, 1} /* dummy shape for simplifying code */);
-    // self define lse data layout as [shape_batch, nhead, shape_seqlen_q, 1]
+    // self define lse data layout as [shape_batch, nhead, shape_seqlen_q]
     Tensor<LSEDataType> lse_host(
-        store_lse ? std::array<ck::index_t, 4>{shape_batch, nhead, shape_seqlen_q, 1}
-                  : std::array<ck::index_t, 4>{1, 1, 1, 1} /* dummy shape for simplifying code */);
+        store_lse ? std::array<ck::index_t, 3>{shape_batch, nhead, shape_seqlen_q}
+                  : std::array<ck::index_t, 3>{1, 1, 1} /* dummy shape for simplifying code */);
 
     Tensor<ODataType> o_host(get_lengths(o_perm, shape_batch, nhead, shape_seqlen_q, hdim_v));
 
@@ -419,7 +419,7 @@ bool run(const ArgParser& arg_parser)
 
         Tensor<SMPLComputeDataType> s_host_ref({nhead, real_seqlen_q, real_seqlen_k});
         Tensor<PDataType> p_host_ref({nhead, real_seqlen_q, real_seqlen_k});
-        Tensor<SMPLComputeDataType> lse_host_ref({nhead, real_seqlen_q, 1});
+        Tensor<SMPLComputeDataType> lse_host_ref({nhead, real_seqlen_q});
 
         ck::index_t nr = nhead / nhead_k;
 
@@ -502,9 +502,9 @@ bool run(const ArgParser& arg_parser)
 
         if(store_lse)
         {
-            Tensor<SMPLComputeDataType> lse_host_result({nhead, real_seqlen_q, 1});
+            Tensor<SMPLComputeDataType> lse_host_result({nhead, real_seqlen_q});
             lse_host_result.ForEach([&](auto& self, auto idx) {
-                self(idx) = lse_host(b, idx[0], idx[1] + query_offset, idx[2]);
+                self(idx) = lse_host(b, idx[0], idx[1] + query_offset);
             });
 
             bool lse_pass = ck::utils::check_err(

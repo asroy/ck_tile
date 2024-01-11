@@ -9,7 +9,7 @@
 template <typename ADataType, typename CompDataType, typename BDataType>
 void reference_batched_softmax(const Tensor<ADataType>& a_b_m_n,
                                Tensor<BDataType>& b_b_m_n,
-                               Tensor<CompDataType>* lse_b_m_n = nullptr)
+                               Tensor<CompDataType>* lse_b_m = nullptr)
 {
     const int N = a_b_m_n.mDesc.GetLengths()[2];
 
@@ -46,9 +46,9 @@ void reference_batched_softmax(const Tensor<ADataType>& a_b_m_n,
                 ck::type_convert<BDataType>(ck::math::exp(v_a - v_max) * inv_sum);
         }
         // lse
-        if(lse_b_m_n)
+        if(lse_b_m)
         {
-            (*lse_b_m_n)(batch, m, 0) = v_max + ck::math::log(v_exp_sum);
+            (*lse_b_m)(batch, m) = v_max + ck::math::log(v_exp_sum);
         }
     };
 
