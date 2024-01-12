@@ -55,7 +55,7 @@ auto create_args(int argc, char* argv[])
                 "if true, will be b*h*s*d, else b*s*h*d")
         .insert("operm", "1", "permute output")
         .insert("bias", "0", "add bias or not")
-        .insert("lse", "1", "0 not store lse, 1 store lse")
+        .insert("lse", "0", "0 not store lse, 1 store lse")
         .insert("prec", "fp16", "data type. fp16 or bf16")
         .insert("mask",
                 "0",
