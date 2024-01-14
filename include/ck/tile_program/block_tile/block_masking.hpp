@@ -84,11 +84,11 @@ struct GenericAttentionMask
     {
     }
     template <typename MaskCoordinates>
-    __host__ __device__ GenericAttentionMask(const MaskCoordinates& mask_coord)
-        : y(mask_coord.At(Number<0>{})),
-          x(mask_coord.At(Number<1>{})),
-          y_total(mask_coord.At(Number<2>{})),
-          x_total(mask_coord.At(Number<3>{}))
+    __host__ __device__ GenericAttentionMask(const MaskCoordinates& mask_coords)
+        : y(mask_coords.At(Number<0>{})),
+          x(mask_coords.At(Number<1>{})),
+          y_total(mask_coords.At(Number<2>{})),
+          x_total(mask_coords.At(Number<3>{}))
     {
     }
 
@@ -220,4 +220,21 @@ make_generic_attention_mask_coordinate_from_lr_window(index_t left_size,
 
     return ck::make_tuple(y, x);
 }
+
+__host__ __device__ constexpr auto
+make_generic_attention_mask_coordinates_from_lr_window(index_t left_size,
+                                                       index_t right_size,
+                                                       index_t y_total,
+                                                       index_t x_total,
+                                                       bool is_top_left = true)
+{
+    const auto mask_coord = make_generic_attention_mask_coordinate_from_lr_window(
+        left_size, right_size, y_total, x_total, is_top_left);
+
+    const auto y = mask_coord.At(ck::Number<0>{});
+    const auto x = mask_coord.At(ck::Number<1>{});
+
+    return ck::make_tuple(y, x, y_total, x_total);
+}
+
 } // namespace ck
