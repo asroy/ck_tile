@@ -447,6 +447,8 @@ bool run(const ArgParser& arg_parser)
                 s_host_ref, bias_host_ref, s_host_ref);
         }
 
+        // construct mask for each batch, this is necessary for group mode
+        mask = decode_mask_info(arg_parser.get_str("mask"), real_seqlen_q, real_seqlen_k);
         if(mask.type == mask_info::MaskType::NoMask) {
             reference_batched_masking<SaccDataType>(s_host_ref, FmhaMasks::NoMask{real_seqlen_q, real_seqlen_k});
         } else if(mask.type == mask_info::MaskType::WindowGeneric) {

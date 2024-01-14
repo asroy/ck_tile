@@ -61,17 +61,10 @@ mask_info decode_mask_info(std::string str, ck::index_t seqlen_q, ck::index_t se
         tmp.right_size = atoi(v.substr(found_1 + 1).c_str());
 
         // TODO: some validation
-        if(t == "t")
+        if(t == "t" || t == "b")
         {
             auto r = ck::make_generic_attention_mask_coordinate_from_lr_window(
-                tmp.left_size, tmp.right_size, y_total, x_total, true);
-            tmp.y = r.At(ck::Number<0>{});
-            tmp.x = r.At(ck::Number<1>{});
-        }
-        else if(t == "b")
-        {
-            auto r = ck::make_generic_attention_mask_coordinate_from_lr_window(
-                tmp.left_size, tmp.right_size, y_total, x_total, false);
+                tmp.left_size, tmp.right_size, y_total, x_total, t == "t");
             tmp.y = r.At(ck::Number<0>{});
             tmp.x = r.At(ck::Number<1>{});
         }

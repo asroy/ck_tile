@@ -561,7 +561,7 @@ struct FmhaFwdKernel
                     mask_coord(ck::Number<0>{}) = kargs.mask_left_size;
                     mask_coord(ck::Number<1>{}) = kargs.mask_right_size;
                 }
-                else if (kargs.mask_type != MaskType::NoMask)
+                else if(kargs.mask_type != MaskType::NoMask)
                 {
                     mask_coord = ck::make_generic_attention_mask_coordinate_from_lr_window(
                         kargs.mask_left_size,
