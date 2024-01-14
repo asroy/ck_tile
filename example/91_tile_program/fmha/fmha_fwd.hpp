@@ -177,8 +177,9 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                      float scale,
                                      bool i_perm,
                                      bool o_perm,
-                                     ck::index_t mask_y,
-                                     ck::index_t mask_x)
+                                     ck::tile_program::block::GenericAttentionMaskType mask_type,
+                                     ck::index_t mask_left_size,
+                                     ck::index_t mask_right_size)
 {
     constexpr bool is_v_rowmajor =
         ck::is_same_v<typename FmhaKernel::VLayout, ck::tensor_layout::gemm::RowMajor>;
@@ -242,8 +243,9 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                          nhead_stride_v,
                                          nhead_stride_bias,
                                          nhead_stride_o,
-                                         mask_y,
-                                         mask_x);
+                                         mask_type,
+                                         mask_left_size,
+                                         mask_right_size);
         }
         else
         { // create batch mode kernel arguments
@@ -273,8 +275,9 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                          batch_stride_v,
                                          batch_stride_bias,
                                          batch_stride_o,
-                                         mask_y,
-                                         mask_x);
+                                         mask_type,
+                                         mask_left_size,
+                                         mask_right_size);
         }
     }();
 

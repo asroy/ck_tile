@@ -11,6 +11,14 @@ namespace ck {
 namespace tile_program {
 namespace block {
 
+enum class GenericAttentionMaskType
+{
+    NoMask = 0,
+    CausalTopLeft,
+    CausalBottomRight,
+    WindowGeneric,
+};
+
 // clang-format off
 /*  Generic Attention Mask Coordinate
     use x(horizontal axis), y(vertical axis) to describe mask.
@@ -181,11 +189,11 @@ struct GenericAttentionMask
 // if left_size < 0 && right_size = 0, it is normal causal mask
 // local is left_size >=0 or right_size >=0
 __host__ __device__ constexpr auto
-make_generic_attention_mask_coordinates_from_lr_window(index_t left_size,
-                                                       index_t right_size,
-                                                       index_t y_total,
-                                                       index_t x_total,
-                                                       bool is_top_left = true)
+make_generic_attention_mask_coordinate_from_lr_window(index_t left_size,
+                                                      index_t right_size,
+                                                      index_t y_total,
+                                                      index_t x_total,
+                                                      bool is_top_left = true)
 {
     index_t x = 0, y = 0;
 
@@ -210,6 +218,6 @@ make_generic_attention_mask_coordinates_from_lr_window(index_t left_size,
         y = y_total - x_total + 1 + left_size;
     }
 
-    return ck::make_tuple(y, x, y_total, x_total);
+    return ck::make_tuple(y, x);
 }
 } // namespace ck

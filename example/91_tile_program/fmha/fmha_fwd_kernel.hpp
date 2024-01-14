@@ -5,9 +5,10 @@
 
 #include <type_traits>
 
-#include "ck/utility/common_header.hpp"
 #include "ck/tensor/tensor_view.hpp"
+#include "ck/tile_program/block_tile/block_masking.hpp"
 #include "ck/tile_program/tile/tile_window.hpp"
+#include "ck/utility/common_header.hpp"
 
 // S[seqlen_q, seqlen_k] = Q[seqlen_q, hdim_q] * K[seqlen_k, hdim_q]
 // S'[seqlen_q, seqlen_k] = S[seqlen_q, seqlen_k] * Scale[1]
@@ -88,9 +89,13 @@ struct FmhaFwdKernel
         ck::index_t batch_stride_bias = 0;
     };
 
+    using MaskType = ck::tile_program::block::GenericAttentionMaskType;
+
     struct FmhaFwdMaskKargs
     {
-        ck::index_t mask_y, mask_x;
+        MaskType mask_type;
+        ck::index_t mask_left_size;
+        ck::index_t mask_right_size;
     };
 
     struct FmhaFwdBatchModeKargs
@@ -143,8 +148,9 @@ struct FmhaFwdKernel
                                                                       ck::index_t batch_stride_v,
                                                                       ck::index_t batch_stride_bias,
                                                                       ck::index_t batch_stride_o,
-                                                                      ck::index_t mask_y,
-                                                                      ck::index_t mask_x)
+                                                                      MaskType mask_type,
+                                                                      ck::index_t mask_left_size,
+                                                                      ck::index_t mask_right_size)
     {
         Kargs kargs{{q_ptr,
                      k_ptr,
@@ -185,8 +191,9 @@ struct FmhaFwdKernel
 
         if constexpr(kHasMask)
         {
-            kargs.mask_y = mask_y;
-            kargs.mask_x = mask_x;
+            kargs.mask_type       = mask_type;
+            kargs.mask_left_size  = mask_left_size;
+            kargs.mask_right_size = mask_right_size;
         }
 
         return kargs;
@@ -215,8 +222,9 @@ struct FmhaFwdKernel
                                                                       ck::index_t nhead_stride_v,
                                                                       ck::index_t nhead_stride_bias,
                                                                       ck::index_t nhead_stride_o,
-                                                                      ck::index_t mask_y,
-                                                                      ck::index_t mask_x)
+                                                                      MaskType mask_type,
+                                                                      ck::index_t mask_left_size,
+                                                                      ck::index_t mask_right_size)
     {
         Kargs kargs{{q_ptr,
                      k_ptr,
@@ -254,8 +262,9 @@ struct FmhaFwdKernel
         }
         if constexpr(kHasMask)
         {
-            kargs.mask_y = mask_y;
-            kargs.mask_x = mask_x;
+            kargs.mask_type       = mask_type;
+            kargs.mask_left_size  = mask_left_size;
+            kargs.mask_right_size = mask_right_size;
         }
 
         return kargs;
@@ -544,9 +553,33 @@ struct FmhaFwdKernel
 
         FmhaMask mask = [&]() {
             if constexpr(kHasMask)
-                return FmhaMask{kargs.mask_y, kargs.mask_x, kargs.seqlen_q, kargs.seqlen_k};
+            {
+                ck::Tuple<ck::index_t, ck::index_t> mask_cood = {0, 0};
+
+                if(kargs.mask_type == MaskType::WindowGeneric)
+                {
+                    mask_cood(ck::Number<0>{}) = kargs.mask_left_size;
+                    mask_cood(ck::Number<1>{}) = kargs.mask_right_size;
+                }
+                else
+                {
+                    mask_cood = ck::make_generic_attention_mask_coordinate_from_lr_window(
+                        kargs.mask_left_size,
+                        kargs.mask_right_size,
+                        kargs.seqlen_q,
+                        kargs.seqlen_k,
+                        kargs.mask_type != MaskType::CausalBottomRight);
+                }
+
+                auto y = mask_cood.At(ck::Number<0>{});
+                auto x = mask_cood.At(ck::Number<1>{});
+
+                return FmhaMask{y, x, kargs.seqlen_q, kargs.seqlen_k};
+            }
             else
+            {
                 return FmhaMask{kargs.seqlen_q, kargs.seqlen_k};
+            }
         }();
 
         auto o_acc_tile =

@@ -90,7 +90,7 @@ struct fmha_fwd_kernel_invoker
     {
         float ave_time;
         BOOL_SWITCH_2(mode == mode_enum::group, kIsGroupMode, use_bias, kHasBias, [&] {
-            if(mask.type == mask_enum::no_mask)
+            if(mask.type == mask_info::MaskType::NoMask)
             {
                 using FmhaMask = FmhaMasks::NoMask;
                 using Kernel =
@@ -102,7 +102,7 @@ struct fmha_fwd_kernel_invoker
             }
             else
             {
-                BOOL_SWITCH(mask.type == mask_enum::window_generic, kIsLocal, [&]() {
+                BOOL_SWITCH(mask.type == mask_info::MaskType::WindowGeneric, kIsLocal, [&]() {
                     using FmhaMask = ck::tile_program::block::GenericAttentionMask<true, kIsLocal>;
                     using Kernel =
                         FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
@@ -337,8 +337,9 @@ bool run(const ArgParser& arg_parser)
                                                                    scale,                        \
                                                                    i_perm,                       \
                                                                    o_perm,                       \
-                                                                   mask.y,                       \
-                                                                   mask.x)
+                                                                   mask.type,                    \
+                                                                   mask.left_size,               \
+                                                                   mask.right_size)
 
     float ave_time         = 0;
     const auto check_hdims = [](ck::index_t hdim_q_, ck::index_t hdim_v_, ck::index_t threshold) {
@@ -446,9 +447,9 @@ bool run(const ArgParser& arg_parser)
                 s_host_ref, bias_host_ref, s_host_ref);
         }
 
-        if(mask.type == mask_enum::no_mask) {
+        if(mask.type == mask_info::MaskType::NoMask) {
             reference_batched_masking<SaccDataType>(s_host_ref, FmhaMasks::NoMask{real_seqlen_q, real_seqlen_k});
-        } else if(mask.type == mask_enum::window_generic) {
+        } else if(mask.type == mask_info::MaskType::WindowGeneric) {
             reference_batched_masking<SaccDataType>(s_host_ref,
                 FmhaMasks::GenericMask{mask.y, mask.x, real_seqlen_q, real_seqlen_k});
         } else {
