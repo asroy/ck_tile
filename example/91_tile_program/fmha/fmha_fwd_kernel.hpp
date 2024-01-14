@@ -554,16 +554,16 @@ struct FmhaFwdKernel
         FmhaMask mask = [&]() {
             if constexpr(kHasMask)
             {
-                ck::Tuple<ck::index_t, ck::index_t> mask_cood = {0, 0};
+                ck::Tuple<ck::index_t, ck::index_t> mask_coord = {0, 0};
 
                 if(kargs.mask_type == MaskType::WindowGeneric)
                 {
-                    mask_cood(ck::Number<0>{}) = kargs.mask_left_size;
-                    mask_cood(ck::Number<1>{}) = kargs.mask_right_size;
+                    mask_coord(ck::Number<0>{}) = kargs.mask_left_size;
+                    mask_coord(ck::Number<1>{}) = kargs.mask_right_size;
                 }
                 else
                 {
-                    mask_cood = ck::make_generic_attention_mask_coordinate_from_lr_window(
+                    mask_coord = ck::make_generic_attention_mask_coordinate_from_lr_window(
                         kargs.mask_left_size,
                         kargs.mask_right_size,
                         kargs.seqlen_q,
@@ -571,8 +571,8 @@ struct FmhaFwdKernel
                         kargs.mask_type != MaskType::CausalBottomRight);
                 }
 
-                auto y = mask_cood.At(ck::Number<0>{});
-                auto x = mask_cood.At(ck::Number<1>{});
+                auto y = mask_coord.At(ck::Number<0>{});
+                auto x = mask_coord.At(ck::Number<1>{});
 
                 return FmhaMask{y, x, kargs.seqlen_q, kargs.seqlen_k};
             }
