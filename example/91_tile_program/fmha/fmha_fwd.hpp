@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <tuple>
+
 #include "ck/ck.hpp"
 #include "ck/stream_config.hpp"
 #include "ck/tensor_operation/gpu/device/tensor_layout.hpp"
@@ -159,28 +161,27 @@ using FmhaFwdKernelSelector =
 
 // Kernel API
 template <typename FmhaKernel>
-auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
-                                     const void* k_ptr,
-                                     const void* v_ptr,
-                                     const void* bias_ptr,
-                                     void* o_ptr,
-                                     const void* seqstart_q_ptr,
-                                     const void* seqstart_k_ptr,
-                                     const void* seqlen_k_ptr,
-                                     ck::index_t batch,
-                                     ck::index_t nhead,
-                                     ck::index_t nhead_k,
-                                     ck::index_t seqlen_q,
-                                     ck::index_t seqlen_k,
-                                     ck::index_t hdim_q,
-                                     ck::index_t hdim_v,
-                                     ck::index_t max_seqlen_q,
-                                     float scale,
-                                     bool i_perm,
-                                     bool o_perm,
-                                     mask_info::MaskType mask_type,
-                                     ck::index_t mask_left_size,
-                                     ck::index_t mask_right_size)
+auto fmha_fwd_create_kargs_and_grids(
+    const void* q_ptr,
+    const void* k_ptr,
+    const void* v_ptr,
+    const void* bias_ptr,
+    void* o_ptr,
+    const void* seqstart_q_ptr,
+    const void* seqstart_k_ptr,
+    const void* seqlen_k_ptr,
+    ck::index_t batch,
+    ck::index_t nhead,
+    ck::index_t nhead_k,
+    ck::index_t seqlen_q,
+    ck::index_t seqlen_k,
+    ck::index_t hdim_q,
+    ck::index_t hdim_v,
+    ck::index_t max_seqlen_q,
+    float scale,
+    bool i_perm,
+    bool o_perm,
+    std::optional<std::tuple<mask_info::MaskType, ck::index_t, ck::index_t>> mask = std::nullopt)
 {
     constexpr bool is_v_rowmajor =
         ck::is_same_v<typename FmhaKernel::VLayout, ck::tensor_layout::gemm::RowMajor>;
@@ -244,9 +245,7 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                          nhead_stride_v,
                                          nhead_stride_bias,
                                          nhead_stride_o,
-                                         mask_type,
-                                         mask_left_size,
-                                         mask_right_size);
+                                         mask);
         }
         else
         { // create batch mode kernel arguments
@@ -276,9 +275,7 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                          batch_stride_v,
                                          batch_stride_bias,
                                          batch_stride_o,
-                                         mask_type,
-                                         mask_left_size,
-                                         mask_right_size);
+                                         mask);
         }
     }();
 

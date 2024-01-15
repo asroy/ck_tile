@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <optional>
 #include <ostream>
 #include <string>
 #include <stdexcept>
@@ -16,27 +17,27 @@ struct mask_info
 
     MaskType type;
     ck::index_t left_size, right_size;
-    ck::index_t y, x;
+    ck::index_t y, x; // only used on host
 
     void serialize(std::ostream& os) const
     {
-        if(type == MaskType::NoMask)
-            os << "n";
-        else if(type == MaskType::CausalTopLeft)
+        if(type == MaskType::CausalTopLeft)
             os << "tl";
         else if(type == MaskType::CausalBottomRight)
             os << "br";
-        else
+        else // CausalMaskDisabled
         {
             os << "g(" << y << "/" << x << ")";
         }
     }
 
-    friend mask_info decode_mask_info(std::string str, ck::index_t seqlen_q, ck::index_t seqlen_k)
+    friend std::optional<mask_info>
+    decode_mask_info(std::string str, ck::index_t seqlen_q, ck::index_t seqlen_k)
     {
         ck::index_t x_total = seqlen_k;
         ck::index_t y_total = seqlen_q;
-        mask_info tmp;
+        mask_info mask;
+
         auto found_0 = str.find(':');
         if(found_0 != std::string::npos)
         {
@@ -49,22 +50,22 @@ struct mask_info
                 throw std::invalid_argument(
                     std::string("cannot construct mask_info from string: ") + str);
             }
-            tmp.type       = mask_info::MaskType::WindowGeneric;
-            tmp.left_size  = atoi(v.substr(0, found_1).c_str());
-            tmp.right_size = atoi(v.substr(found_1 + 1).c_str());
+            mask.type       = mask_info::MaskType::CausalMaskDisabled;
+            mask.left_size  = atoi(v.substr(0, found_1).c_str());
+            mask.right_size = atoi(v.substr(found_1 + 1).c_str());
 
             // TODO: some validation
             if(t == "t" || t == "b")
             {
                 auto r = ck::make_generic_attention_mask_coordinate_from_lr_window(
-                    tmp.left_size, tmp.right_size, y_total, x_total, t == "t");
-                tmp.y = r.At(ck::Number<0>{});
-                tmp.x = r.At(ck::Number<1>{});
+                    mask.left_size, mask.right_size, y_total, x_total, t == "t");
+                mask.y = r.At(ck::Number<0>{});
+                mask.x = r.At(ck::Number<1>{});
             }
             else if(t == "g")
             {
-                tmp.y = tmp.left_size;
-                tmp.x = tmp.right_size;
+                mask.y = mask.left_size;
+                mask.x = mask.right_size;
             }
             else
             {
@@ -72,37 +73,46 @@ struct mask_info
                 throw std::invalid_argument(
                     std::string("cannot construct mask_info from string: ") + str);
             }
+
+            return mask;
         }
         else
         {
             // should be 0, 1, 2
-            tmp.type = static_cast<mask_info::MaskType>(atoi(str.c_str()));
-            if(tmp.type == mask_info::MaskType::NoMask)
+            const auto chosen_type = static_cast<int>(atoi(str.c_str()));
+            if(chosen_type == 0)
             {
-                tmp.left_size  = -1;
-                tmp.right_size = -1;
-
-                tmp.y = 0;
-                tmp.x = 0;
+                return std::nullopt;
             }
-            else if(tmp.type == mask_info::MaskType::CausalTopLeft)
+
+            mask.type = static_cast<mask_info::MaskType>(chosen_type);
+            if(mask.type == mask_info::MaskType::CausalTopLeft)
             {
-                tmp.left_size  = -1;
-                tmp.right_size = 0;
+                mask.left_size  = -1;
+                mask.right_size = 0;
 
-                tmp.y = seqlen_q;
-                tmp.x = 1;
+                mask.y = seqlen_q;
+                mask.x = 1;
             }
-            else if(tmp.type == mask_info::MaskType::CausalBottomRight)
+            else if(mask.type == mask_info::MaskType::CausalBottomRight)
             {
-                tmp.left_size  = -1;
-                tmp.right_size = 0;
+                mask.left_size  = -1;
+                mask.right_size = 0;
 
-                tmp.y = seqlen_q;
-                tmp.x = seqlen_k - seqlen_q + 1;
+                mask.y = seqlen_q;
+                mask.x = seqlen_k - seqlen_q + 1;
             }
+            else
+            {
+                printf("not supported type %d\n", chosen_type);
+                throw std::invalid_argument("cannot construct mask_info from type: " +
+                                            std::to_string(chosen_type));
+            }
+
+            return mask;
         }
-        return tmp;
+
+        return std::nullopt;
     }
 
     friend std::ostream& operator<<(std::ostream& os, const mask_info& mi)
@@ -110,6 +120,16 @@ struct mask_info
         mi.serialize(os);
         return os;
     }
+
+    friend std::ostream& operator<<(std::ostream& os, const std::optional<mask_info>& mi)
+    {
+        if(mi.has_value())
+        {
+            return os << *mi;
+        }
+        return os << "n";
+    }
 };
 
-mask_info decode_mask_info(std::string str, ck::index_t seqlen_q, ck::index_t seqlen_k);
+std::optional<mask_info>
+decode_mask_info(std::string str, ck::index_t seqlen_q, ck::index_t seqlen_k);

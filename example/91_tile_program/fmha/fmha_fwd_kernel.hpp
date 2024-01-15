@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <tuple>
 #include <type_traits>
+#include <optional>
 
 #include "ck/tensor/tensor_view.hpp"
 #include "ck/tile_program/block_tile/block_masking.hpp"
@@ -122,35 +124,34 @@ struct FmhaFwdKernel
     using Kargs = std::conditional_t<kIsGroupMode, FmhaFwdGroupModeKargs, FmhaFwdBatchModeKargs>;
 
     template <bool Cond = !kIsGroupMode>
-    __host__ static constexpr std::enable_if_t<Cond, Kargs> MakeKargs(const void* q_ptr,
-                                                                      const void* k_ptr,
-                                                                      const void* v_ptr,
-                                                                      const void* bias_ptr,
-                                                                      void* o_ptr,
-                                                                      ck::index_t seqlen_q,
-                                                                      ck::index_t seqlen_k,
-                                                                      ck::index_t hdim_q,
-                                                                      ck::index_t hdim_v,
-                                                                      ck::index_t nhead_ratio_qk,
-                                                                      float scale,
-                                                                      ck::index_t stride_q,
-                                                                      ck::index_t stride_k,
-                                                                      ck::index_t stride_v,
-                                                                      ck::index_t stride_bias,
-                                                                      ck::index_t stride_o,
-                                                                      ck::index_t nhead_stride_q,
-                                                                      ck::index_t nhead_stride_k,
-                                                                      ck::index_t nhead_stride_v,
-                                                                      ck::index_t nhead_stride_bias,
-                                                                      ck::index_t nhead_stride_o,
-                                                                      ck::index_t batch_stride_q,
-                                                                      ck::index_t batch_stride_k,
-                                                                      ck::index_t batch_stride_v,
-                                                                      ck::index_t batch_stride_bias,
-                                                                      ck::index_t batch_stride_o,
-                                                                      MaskType mask_type,
-                                                                      ck::index_t mask_left_size,
-                                                                      ck::index_t mask_right_size)
+    __host__ static constexpr std::enable_if_t<Cond, Kargs>
+    MakeKargs(const void* q_ptr,
+              const void* k_ptr,
+              const void* v_ptr,
+              const void* bias_ptr,
+              void* o_ptr,
+              ck::index_t seqlen_q,
+              ck::index_t seqlen_k,
+              ck::index_t hdim_q,
+              ck::index_t hdim_v,
+              ck::index_t nhead_ratio_qk,
+              float scale,
+              ck::index_t stride_q,
+              ck::index_t stride_k,
+              ck::index_t stride_v,
+              ck::index_t stride_bias,
+              ck::index_t stride_o,
+              ck::index_t nhead_stride_q,
+              ck::index_t nhead_stride_k,
+              ck::index_t nhead_stride_v,
+              ck::index_t nhead_stride_bias,
+              ck::index_t nhead_stride_o,
+              ck::index_t batch_stride_q,
+              ck::index_t batch_stride_k,
+              ck::index_t batch_stride_v,
+              ck::index_t batch_stride_bias,
+              ck::index_t batch_stride_o,
+              std::optional<std::tuple<MaskType, ck::index_t, ck::index_t>> mask = std::nullopt)
     {
         Kargs kargs{{q_ptr,
                      k_ptr,
@@ -191,40 +192,41 @@ struct FmhaFwdKernel
 
         if constexpr(kHasMask)
         {
-            kargs.mask_type       = mask_type;
-            kargs.mask_left_size  = mask_left_size;
-            kargs.mask_right_size = mask_right_size;
+            assert(mask.has_value());
+
+            kargs.mask_type       = std::get<0>(*mask);
+            kargs.mask_left_size  = std::get<1>(*mask);
+            kargs.mask_right_size = std::get<2>(*mask);
         }
 
         return kargs;
     }
 
     template <bool Cond = kIsGroupMode>
-    __host__ static constexpr std::enable_if_t<Cond, Kargs> MakeKargs(const void* q_ptr,
-                                                                      const void* k_ptr,
-                                                                      const void* v_ptr,
-                                                                      const void* bias_ptr,
-                                                                      void* o_ptr,
-                                                                      const void* seqstart_q_ptr,
-                                                                      const void* seqstart_k_ptr,
-                                                                      const void* seqlen_k_ptr,
-                                                                      ck::index_t hdim_q,
-                                                                      ck::index_t hdim_v,
-                                                                      ck::index_t nhead_ratio_qk,
-                                                                      float scale,
-                                                                      ck::index_t stride_q,
-                                                                      ck::index_t stride_k,
-                                                                      ck::index_t stride_v,
-                                                                      ck::index_t stride_bias,
-                                                                      ck::index_t stride_o,
-                                                                      ck::index_t nhead_stride_q,
-                                                                      ck::index_t nhead_stride_k,
-                                                                      ck::index_t nhead_stride_v,
-                                                                      ck::index_t nhead_stride_bias,
-                                                                      ck::index_t nhead_stride_o,
-                                                                      MaskType mask_type,
-                                                                      ck::index_t mask_left_size,
-                                                                      ck::index_t mask_right_size)
+    __host__ static constexpr std::enable_if_t<Cond, Kargs>
+    MakeKargs(const void* q_ptr,
+              const void* k_ptr,
+              const void* v_ptr,
+              const void* bias_ptr,
+              void* o_ptr,
+              const void* seqstart_q_ptr,
+              const void* seqstart_k_ptr,
+              const void* seqlen_k_ptr,
+              ck::index_t hdim_q,
+              ck::index_t hdim_v,
+              ck::index_t nhead_ratio_qk,
+              float scale,
+              ck::index_t stride_q,
+              ck::index_t stride_k,
+              ck::index_t stride_v,
+              ck::index_t stride_bias,
+              ck::index_t stride_o,
+              ck::index_t nhead_stride_q,
+              ck::index_t nhead_stride_k,
+              ck::index_t nhead_stride_v,
+              ck::index_t nhead_stride_bias,
+              ck::index_t nhead_stride_o,
+              std::optional<std::tuple<MaskType, ck::index_t, ck::index_t>> mask = std::nullopt)
     {
         Kargs kargs{{q_ptr,
                      k_ptr,
@@ -260,11 +262,14 @@ struct FmhaFwdKernel
             kargs.stride_bias       = stride_bias;
             kargs.nhead_stride_bias = nhead_stride_bias;
         }
+
         if constexpr(kHasMask)
         {
-            kargs.mask_type       = mask_type;
-            kargs.mask_left_size  = mask_left_size;
-            kargs.mask_right_size = mask_right_size;
+            assert(mask.has_value());
+
+            kargs.mask_type       = std::get<0>(*mask);
+            kargs.mask_left_size  = std::get<1>(*mask);
+            kargs.mask_right_size = std::get<2>(*mask);
         }
 
         return kargs;
@@ -556,12 +561,12 @@ struct FmhaFwdKernel
             {
                 ck::Tuple<ck::index_t, ck::index_t> mask_coord = {0, 0};
 
-                if(kargs.mask_type == MaskType::WindowGeneric)
+                if(kargs.mask_type == MaskType::CausalMaskDisabled)
                 {
                     mask_coord(ck::Number<0>{}) = kargs.mask_left_size;
                     mask_coord(ck::Number<1>{}) = kargs.mask_right_size;
                 }
-                else if(kargs.mask_type != MaskType::NoMask)
+                else
                 {
                     mask_coord = ck::make_generic_attention_mask_coordinate_from_lr_window(
                         kargs.mask_left_size,

@@ -5,6 +5,7 @@
 #include <cstring>
 #include <functional>
 #include <numeric>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <tuple>
@@ -78,10 +79,10 @@ struct fmha_fwd_kernel_invoker
     // args that may passed as karg shoule use operator()
     mode_enum mode;
     bool use_bias;
-    mask_info mask;
+    std::optional<mask_info> mask;
 
-    fmha_fwd_kernel_invoker(mode_enum mode_, bool use_bias_, mask_info mask_)
-        : mode(mode_), use_bias(use_bias_), mask(mask_)
+    fmha_fwd_kernel_invoker(mode_enum mode_, bool use_bias_, std::optional<mask_info> mask_)
+        : mode(mode_), use_bias(use_bias_), mask(std::move(mask_))
     {
     }
 
@@ -90,25 +91,26 @@ struct fmha_fwd_kernel_invoker
     {
         float ave_time;
         BOOL_SWITCH_2(mode == mode_enum::group, kIsGroupMode, use_bias, kHasBias, [&] {
-            if(mask.type == mask_info::MaskType::NoMask)
+            if(!mask.has_value())
             {
                 using FmhaMask = FmhaMasks::NoMask;
                 using Kernel =
                     FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
 
-                auto [kargs, grids] = fmha_fwd_create_kargs_and_grids<Kernel>(
-                    std::forward<Args>(args)..., mask.type, mask.left_size, mask.right_size);
+                auto [kargs, grids] =
+                    fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)...);
                 ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
             }
             else
             {
-                BOOL_SWITCH(mask.type == mask_info::MaskType::WindowGeneric, kIsLocal, [&]() {
+                BOOL_SWITCH(mask->type == mask_info::MaskType::CausalMaskDisabled, kIsLocal, [&]() {
                     using FmhaMask = ck::tile_program::block::GenericAttentionMask<true, kIsLocal>;
                     using Kernel =
                         FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
 
                     auto [kargs, grids] = fmha_fwd_create_kargs_and_grids<Kernel>(
-                        std::forward<Args>(args)..., mask.type, mask.left_size, mask.right_size);
+                        std::forward<Args>(args)...,
+                        std::make_tuple(mask->type, mask->left_size, mask->right_size));
                     ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
                 });
             }
@@ -179,7 +181,8 @@ bool run(const ArgParser& arg_parser)
     bool use_bias = arg_parser.get_uint32("bias");
 
     // construct mask object in advance, this may be used directly for batch mode
-    mask_info mask = decode_mask_info(arg_parser.get_str("mask"), seqlen_q, seqlen_k);
+    std::optional<mask_info> mask =
+        decode_mask_info(arg_parser.get_str("mask"), seqlen_q, seqlen_k);
 
     int init_method = arg_parser.get_int("init");
 
@@ -447,14 +450,14 @@ bool run(const ArgParser& arg_parser)
 
         // construct mask objects for each batch, this is necessary for group mode
         mask = decode_mask_info(arg_parser.get_str("mask"), real_seqlen_q, real_seqlen_k);
-        if(mask.type == mask_info::MaskType::NoMask) {
+        if(!mask.has_value()) {
             reference_batched_masking<SaccDataType>(s_host_ref, FmhaMasks::NoMask{real_seqlen_q, real_seqlen_k});
-        } else if(mask.type == mask_info::MaskType::WindowGeneric) {
+        } else if(mask->type == mask_info::MaskType::CausalMaskDisabled) {
             reference_batched_masking<SaccDataType>(s_host_ref,
-                FmhaMasks::GenericMask{mask.y, mask.x, real_seqlen_q, real_seqlen_k});
+                FmhaMasks::GenericMask{mask->y, mask->x, real_seqlen_q, real_seqlen_k});
         } else {
             reference_batched_masking<SaccDataType>(s_host_ref,
-                FmhaMasks::CausalMask{mask.y, mask.x, real_seqlen_q, real_seqlen_k});
+                FmhaMasks::CausalMask{mask->y, mask->x, real_seqlen_q, real_seqlen_k});
         }
         reference_batched_softmax<SMPLComputeDataType, SMPLComputeDataType, PDataType>(s_host_ref, p_host_ref);
         reference_batched_gemm<PDataType, VDataType, OaccDataType, ODataType>(p_host_ref, v_host_ref, o_host_ref);
