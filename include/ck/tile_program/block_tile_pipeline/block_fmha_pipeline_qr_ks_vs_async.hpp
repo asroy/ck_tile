@@ -59,6 +59,10 @@ struct BlockFmhaPipelineQRKSVSAsync
     static constexpr bool kHasBias         = Problem::kHasBias;
     static constexpr bool kStoreLSE        = Problem::kStoreLSE;
 
+#if CK_FMHA_FWD_FAST_EXP2
+    static constexpr auto R_LOG2E = 1.0 / math::log2e_v<SaccDataType>;
+#endif
+
     __host__ __device__ static constexpr ck::index_t GetSmemSize()
     {
         return Policy::template GetSmemSize<Problem>();
@@ -523,11 +527,11 @@ struct BlockFmhaPipelineQRKSVSAsync
 #if CK_FMHA_FWD_FAST_EXP2
                 if constexpr(is_null_tile_window(bias_dram_window))
                 {
-                    lse(i_idx) = m_[i_idx] * scale / C_LOG2E + math::log(l_[i_idx]);
+                    lse(i_idx) = m_[i_idx] * scale * R_LOG2E + math::log(l_[i_idx]);
                 }
                 else
                 {
-                    lse(i_idx) = m_[i_idx] / C_LOG2E + math::log(l_[i_idx]);
+                    lse(i_idx) = m_[i_idx] * R_LOG2E + math::log(l_[i_idx]);
                 }
 #else
                 lse(i_idx) = m_[i_idx] + math::log(l_[i_idx]);
