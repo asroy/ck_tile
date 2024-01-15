@@ -18,6 +18,7 @@
 #include "fmha_fwd_epilogue.hpp"
 #include "fmha_fwd_kernel.hpp"
 #include "fmha_fwd_tile_partitioner.hpp"
+#include "mask.hpp"
 
 template <typename DataType>
 struct FmhaFwdTypeConfig;
@@ -177,9 +178,7 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                      float scale,
                                      bool i_perm,
                                      bool o_perm,
-                                     ck::tile_program::block::GenericAttentionMaskType mask_type,
-                                     ck::index_t mask_left_size,
-                                     ck::index_t mask_right_size)
+                                     const mask_info& mask)
 {
     constexpr bool is_v_rowmajor =
         ck::is_same_v<typename FmhaKernel::VLayout, ck::tensor_layout::gemm::RowMajor>;
@@ -243,9 +242,9 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                          nhead_stride_v,
                                          nhead_stride_bias,
                                          nhead_stride_o,
-                                         mask_type,
-                                         mask_left_size,
-                                         mask_right_size);
+                                         mask.type,
+                                         mask.left_size,
+                                         mask.right_size);
         }
         else
         { // create batch mode kernel arguments
@@ -275,9 +274,9 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                          batch_stride_v,
                                          batch_stride_bias,
                                          batch_stride_o,
-                                         mask_type,
-                                         mask_left_size,
-                                         mask_right_size);
+                                         mask.type,
+                                         mask.y,
+                                         mask.x);
         }
     }();
 

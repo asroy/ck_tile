@@ -97,7 +97,7 @@ struct fmha_fwd_kernel_invoker
                     FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
 
                 auto [kargs, grids] =
-                    fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)...);
+                    fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)..., mask);
                 ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
             }
             else
@@ -108,7 +108,7 @@ struct fmha_fwd_kernel_invoker
                         FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
 
                     auto [kargs, grids] =
-                        fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)...);
+                        fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)..., mask);
                     ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
                 });
             }
@@ -178,7 +178,7 @@ bool run(const ArgParser& arg_parser)
 
     bool use_bias = arg_parser.get_uint32("bias");
 
-    mask_info mask = decode_mask_info(arg_parser.get_str("mask"), seqlen_q, seqlen_k);
+    mask_info mask{arg_parser.get_str("mask"), seqlen_q, seqlen_k};
 
     int init_method = arg_parser.get_int("init");
 
@@ -336,10 +336,7 @@ bool run(const ArgParser& arg_parser)
                                                                    max_seqlen_q,                 \
                                                                    scale,                        \
                                                                    i_perm,                       \
-                                                                   o_perm,                       \
-                                                                   mask.type,                    \
-                                                                   mask.left_size,               \
-                                                                   mask.right_size)
+                                                                   o_perm)
 
     float ave_time         = 0;
     const auto check_hdims = [](ck::index_t hdim_q_, ck::index_t hdim_v_, ck::index_t threshold) {
@@ -448,7 +445,7 @@ bool run(const ArgParser& arg_parser)
         }
 
         // construct mask for each batch, this is necessary for group mode
-        mask = decode_mask_info(arg_parser.get_str("mask"), real_seqlen_q, real_seqlen_k);
+        mask = mask_info{arg_parser.get_str("mask"), real_seqlen_q, real_seqlen_k};
         if(mask.type == mask_info::MaskType::NoMask) {
             reference_batched_masking<SaccDataType>(s_host_ref, FmhaMasks::NoMask{real_seqlen_q, real_seqlen_k});
         } else if(mask.type == mask_info::MaskType::WindowGeneric) {
