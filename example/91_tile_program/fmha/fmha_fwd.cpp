@@ -178,6 +178,7 @@ bool run(const ArgParser& arg_parser)
 
     bool use_bias = arg_parser.get_uint32("bias");
 
+    // construct mask object in advance, this may be used directly for batch mode
     mask_info mask{arg_parser.get_str("mask"), seqlen_q, seqlen_k};
 
     int init_method = arg_parser.get_int("init");
@@ -444,7 +445,7 @@ bool run(const ArgParser& arg_parser)
                 s_host_ref, bias_host_ref, s_host_ref);
         }
 
-        // construct mask for each batch, this is necessary for group mode
+        // construct mask objects for each batch, this is necessary for group mode
         mask = mask_info{arg_parser.get_str("mask"), real_seqlen_q, real_seqlen_k};
         if(mask.type == mask_info::MaskType::NoMask) {
             reference_batched_masking<SaccDataType>(s_host_ref, FmhaMasks::NoMask{real_seqlen_q, real_seqlen_k});
