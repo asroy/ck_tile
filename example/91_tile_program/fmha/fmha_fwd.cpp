@@ -96,8 +96,8 @@ struct fmha_fwd_kernel_invoker
                 using Kernel =
                     FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
 
-                auto [kargs, grids] =
-                    fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)..., mask);
+                auto [kargs, grids] = fmha_fwd_create_kargs_and_grids<Kernel>(
+                    std::forward<Args>(args)..., mask.type, mask.left_size, mask.right_size);
                 ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
             }
             else
@@ -107,8 +107,8 @@ struct fmha_fwd_kernel_invoker
                     using Kernel =
                         FmhaFwdKernelSelector<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>;
 
-                    auto [kargs, grids] =
-                        fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)..., mask);
+                    auto [kargs, grids] = fmha_fwd_create_kargs_and_grids<Kernel>(
+                        std::forward<Args>(args)..., mask.type, mask.left_size, mask.right_size);
                     ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
                 });
             }
@@ -179,7 +179,7 @@ bool run(const ArgParser& arg_parser)
     bool use_bias = arg_parser.get_uint32("bias");
 
     // construct mask object in advance, this may be used directly for batch mode
-    mask_info mask{arg_parser.get_str("mask"), seqlen_q, seqlen_k};
+    mask_info mask = decode_mask_info(arg_parser.get_str("mask"), seqlen_q, seqlen_k);
 
     int init_method = arg_parser.get_int("init");
 
@@ -446,7 +446,7 @@ bool run(const ArgParser& arg_parser)
         }
 
         // construct mask objects for each batch, this is necessary for group mode
-        mask = mask_info{arg_parser.get_str("mask"), real_seqlen_q, real_seqlen_k};
+        mask = decode_mask_info(arg_parser.get_str("mask"), real_seqlen_q, real_seqlen_k);
         if(mask.type == mask_info::MaskType::NoMask) {
             reference_batched_masking<SaccDataType>(s_host_ref, FmhaMasks::NoMask{real_seqlen_q, real_seqlen_k});
         } else if(mask.type == mask_info::MaskType::WindowGeneric) {

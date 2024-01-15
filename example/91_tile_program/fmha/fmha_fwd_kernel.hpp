@@ -91,14 +91,7 @@ struct FmhaFwdKernel
 
     using MaskType = ck::tile_program::block::GenericAttentionMaskType;
 
-    struct FmhaFwdBatchModeMaskKargs
-    {
-        MaskType mask_type;
-        ck::index_t mask_y;
-        ck::index_t mask_x;
-    };
-
-    struct FmhaFwdGroupModeMaskKargs
+    struct FmhaFwdMaskKargs
     {
         MaskType mask_type;
         ck::index_t mask_left_size;
@@ -108,7 +101,7 @@ struct FmhaFwdKernel
     struct FmhaFwdBatchModeKargs
         : FmhaFwdCommonKargs,
           std::conditional_t<kHasBias, FmhaFwdBatchModeBiasKargs, FmhaFwdEmptyKargs<0>>,
-          std::conditional_t<kHasMask, FmhaFwdBatchModeMaskKargs, FmhaFwdEmptyKargs<1>>
+          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
     {
         ck::index_t batch_stride_q;
         ck::index_t batch_stride_k;
@@ -119,7 +112,7 @@ struct FmhaFwdKernel
     struct FmhaFwdGroupModeKargs
         : FmhaFwdCommonKargs,
           std::conditional_t<kHasBias, FmhaFwdCommonBiasKargs, FmhaFwdEmptyKargs<0>>,
-          std::conditional_t<kHasMask, FmhaFwdGroupModeMaskKargs, FmhaFwdEmptyKargs<1>>
+          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
     {
         const int32_t* seqstart_q_ptr;
         const int32_t* seqstart_k_ptr;
@@ -156,8 +149,8 @@ struct FmhaFwdKernel
                                                                       ck::index_t batch_stride_bias,
                                                                       ck::index_t batch_stride_o,
                                                                       MaskType mask_type,
-                                                                      ck::index_t mask_y,
-                                                                      ck::index_t mask_x)
+                                                                      ck::index_t mask_left_size,
+                                                                      ck::index_t mask_right_size)
     {
         Kargs kargs{{q_ptr,
                      k_ptr,
@@ -198,9 +191,9 @@ struct FmhaFwdKernel
 
         if constexpr(kHasMask)
         {
-            kargs.mask_type = mask_type;
-            kargs.mask_y    = mask_y;
-            kargs.mask_x    = mask_x;
+            kargs.mask_type       = mask_type;
+            kargs.mask_left_size  = mask_left_size;
+            kargs.mask_right_size = mask_right_size;
         }
 
         return kargs;
@@ -561,34 +554,27 @@ struct FmhaFwdKernel
         FmhaMask mask = [&]() {
             if constexpr(kHasMask)
             {
-                if constexpr(kIsGroupMode)
+                ck::Tuple<ck::index_t, ck::index_t> mask_coord = {0, 0};
+
+                if(kargs.mask_type == MaskType::WindowGeneric)
                 {
-                    ck::Tuple<ck::index_t, ck::index_t> mask_coord = {0, 0};
-
-                    if(kargs.mask_type == MaskType::WindowGeneric)
-                    {
-                        mask_coord(ck::Number<0>{}) = kargs.mask_left_size;
-                        mask_coord(ck::Number<1>{}) = kargs.mask_right_size;
-                    }
-                    else if(kargs.mask_type != MaskType::NoMask)
-                    {
-                        mask_coord = ck::make_generic_attention_mask_coordinate_from_lr_window(
-                            kargs.mask_left_size,
-                            kargs.mask_right_size,
-                            kargs.seqlen_q,
-                            kargs.seqlen_k,
-                            kargs.mask_type != MaskType::CausalBottomRight);
-                    }
-
-                    auto y = mask_coord.At(ck::Number<0>{});
-                    auto x = mask_coord.At(ck::Number<1>{});
-
-                    return FmhaMask{y, x, kargs.seqlen_q, kargs.seqlen_k};
+                    mask_coord(ck::Number<0>{}) = kargs.mask_left_size;
+                    mask_coord(ck::Number<1>{}) = kargs.mask_right_size;
                 }
-                else
+                else if(kargs.mask_type != MaskType::NoMask)
                 {
-                    return FmhaMask{kargs.mask_y, kargs.mask_x, kargs.seqlen_q, kargs.seqlen_k};
+                    mask_coord = ck::make_generic_attention_mask_coordinate_from_lr_window(
+                        kargs.mask_left_size,
+                        kargs.mask_right_size,
+                        kargs.seqlen_q,
+                        kargs.seqlen_k,
+                        kargs.mask_type != MaskType::CausalBottomRight);
                 }
+
+                auto y = mask_coord.At(ck::Number<0>{});
+                auto x = mask_coord.At(ck::Number<1>{});
+
+                return FmhaMask{y, x, kargs.seqlen_q, kargs.seqlen_k};
             }
             else
             {
