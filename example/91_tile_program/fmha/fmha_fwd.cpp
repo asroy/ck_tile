@@ -82,7 +82,7 @@ struct fmha_fwd_kernel_invoker
     std::optional<mask_info> mask;
 
     fmha_fwd_kernel_invoker(mode_enum mode_, bool use_bias_, std::optional<mask_info> mask_)
-        : mode(mode_), use_bias(use_bias_), mask(std::move(mask_))
+        : mode(mode_), use_bias(use_bias_), mask(mask_)
     {
     }
 
