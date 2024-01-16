@@ -75,11 +75,66 @@ __device__ void clear_tile(DstrTensors& dstr_tensor)
     set_tile(dstr_tensor, 0);
 }
 
+template <typename OutDataType, typename InDstrTensors>
+__device__ auto cast_tile_pk_fp8x4(const InDstrTensors& in_dstr_tensors)
+{
+    // This API is designed to use the _pk_ serious of function
+    constexpr auto in_tile_dstr = InDstrTensors::GetTileDistribution();
+
+    constexpr index_t thread_buffer_size    = InDstrTensors::GetThreadBufferSize();
+    constexpr index_t thread_buffer_size_pk = thread_buffer_size / 4;
+
+    auto out_dstr_tensor = make_static_distributed_tensor<OutDataType>(in_tile_dstr);
+
+    static_for<0, thread_buffer_size_pk, 1>{}([&](auto i) {
+        uint32_t x =
+            __builtin_amdgcn_cvt_pk_fp8_f32(in_dstr_tensors.GetThreadBuffer()[Number<4 * i + 0>{}],
+                                            in_dstr_tensors.GetThreadBuffer()[Number<4 * i + 1>{}],
+                                            0,
+                                            false); // false -> WORD0
+
+        uint32_t y =
+            __builtin_amdgcn_cvt_pk_fp8_f32(in_dstr_tensors.GetThreadBuffer()[Number<4 * i + 2>{}],
+                                            in_dstr_tensors.GetThreadBuffer()[Number<4 * i + 3>{}],
+                                            0,
+                                            false); // false -> WORD0
+
+        constexpr int32_t m0 = 0x05040100;
+
+        uint32_t d = __builtin_amdgcn_perm(y, x, m0);
+
+        union
+        {
+            uint32_t data;
+            struct
+            {
+                uint8_t d[4];
+            };
+        } pool;
+        pool.data = d;
+
+        out_dstr_tensor.GetThreadBuffer()(Number<4 * i + 0>{}) = pool.d[0];
+        out_dstr_tensor.GetThreadBuffer()(Number<4 * i + 1>{}) = pool.d[1];
+        out_dstr_tensor.GetThreadBuffer()(Number<4 * i + 2>{}) = pool.d[2];
+        out_dstr_tensor.GetThreadBuffer()(Number<4 * i + 3>{}) = pool.d[3];
+    });
+
+    return out_dstr_tensor;
+}
+
 template <typename DstType, typename SrcDstrTensors>
 __device__ auto cast_tile(const SrcDstrTensors& src_tensor)
 {
-    return tile_elementwise_in(type_convert<DstType, typename SrcDstrTensors::DataType>,
-                               src_tensor);
+    if constexpr((ck::is_same_v<DstType, f8_t> ||
+                  ck::is_same_v<DstType, bf8_t>)&&ck::is_same_v<typename SrcDstrTensors::DataType,
+                                                                float> &&
+                 (SrcDstrTensors::GetThreadBufferSize() % 4 == 0))
+    {
+        return cast_tile_pk_fp8x4<DstType, SrcDstrTensors>(src_tensor);
+    }
+    else
+        return tile_elementwise_in(type_convert<DstType, typename SrcDstrTensors::DataType>,
+                                   src_tensor);
 }
 
 // no-op function for NullTensor arguments

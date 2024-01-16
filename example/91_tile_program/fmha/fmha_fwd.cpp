@@ -50,13 +50,16 @@ auto create_args(int argc, char* argv[])
         .insert("d", "128", "head dim for q, k")
         .insert("d_v", "0", "head dim for v, 0 means equal to d")
         .insert("scale", "0", "scale factor. 0 means equal to 1/sqrt(seqlen)")
+        .insert("descale_q", "1", "scale factor for fp8 quantization")
+        .insert("descale_k", "1", "scale factor for fp8 quantization")
+        .insert("descale_v", "1", "scale factor for fp8 quantization")
         .insert("iperm",
                 "1",
                 "permute input\n"
                 "if true, will be b*h*s*d, else b*s*h*d")
         .insert("operm", "1", "permute output")
         .insert("bias", "0", "add bias or not")
-        .insert("prec", "fp16", "data type. fp16 or bf16")
+        .insert("prec", "fp16", "data type. fp16/bf16/fp8/bf8")
         .insert("mask",
                 "0",
                 "0: no mask, 1: top-left, 2:bottom-right\n"
@@ -110,6 +113,47 @@ struct fmha_fwd_kernel_invoker
                     auto [kargs, grids] =
                         fmha_fwd_create_kargs_and_grids<Kernel>(std::forward<Args>(args)...);
                     ave_time = fmha_fwd_run<Kernel>(stream, kargs, grids);
+                });
+            }
+        });
+        return ave_time;
+    }
+};
+
+template <ck::index_t HDim_>
+struct fmha_fwd_kernel_invoker<HDim_, ck::f8_t>
+{
+    static constexpr ck::index_t HDim = HDim_;
+    using DataType                    = ck::f8_t;
+    // these args are used to select kernel.
+    // args that may passed as karg shoule use operator()
+    mode_enum mode;
+    bool use_bias;
+    mask_info mask;
+
+    fmha_fwd_kernel_invoker(mode_enum mode_, bool use_bias_, mask_info mask_)
+        : mode(mode_), use_bias(use_bias_), mask(mask_)
+    {
+    }
+
+    template <typename... Args>
+    float operator()(const StreamConfig& s, Args&&... args)
+    {
+        float ave_time;
+        BOOL_SWITCH_2(mode == mode_enum::group, kIsGroupMode, use_bias, kHasBias, [&] {
+            fmha_fwd_args a{std::forward<Args>(args)...};
+            if(mask.type == mask_enum::no_mask)
+            {
+                using mask   = FmhaMasks::NoMask;
+                using traits = fmha_fwd_traits<HDim, DataType, kIsGroupMode, mask, kHasBias>;
+                ave_time     = fmha_fwd_<traits>(s, a);
+            }
+            else
+            {
+                BOOL_SWITCH(mask.type == mask_enum::window_generic, kIsLocal, [&]() {
+                    using mask   = ck::tile_program::block::GenericAttentionMask<true, kIsLocal>;
+                    using traits = fmha_fwd_traits<HDim, DataType, kIsGroupMode, mask, kHasBias>;
+                    ave_time     = fmha_fwd_<traits>(s, a);
                 });
             }
         });
@@ -175,6 +219,10 @@ bool run(const ArgParser& arg_parser)
     float scale = arg_parser.get_float("scale");
     if(scale == .0f)
         scale = 1.0 / ck::math::sqrt(static_cast<float>(hdim_q)); // TODO: q ? v ?
+
+    float descale_q = arg_parser.get_float("descale_q");
+    float descale_k = arg_parser.get_float("descale_k");
+    float descale_v = arg_parser.get_float("descale_v");
 
     bool use_bias = arg_parser.get_uint32("bias");
 
@@ -335,8 +383,10 @@ bool run(const ArgParser& arg_parser)
                                                                    hdim_v,                       \
                                                                    max_seqlen_q,                 \
                                                                    scale,                        \
-                                                                   i_perm,                       \
-                                                                   o_perm,                       \
+                                                                   descale_q * descale_k,        \
+                                                                   descale_v,                    \
+                                                                   static_cast<bool>(i_perm),    \
+                                                                   static_cast<bool>(o_perm),    \
                                                                    mask.y,                       \
                                                                    mask.x)
 
@@ -347,18 +397,19 @@ bool run(const ArgParser& arg_parser)
         return compare(hdim_q_, threshold) && compare(hdim_v_, threshold);
     };
 
-    if(check_hdims(hdim_q, hdim_v, 32))
-    {
-        ave_time = INVOKE_FMHA_KERNEL(32);
-    }
-    else if(check_hdims(hdim_q, hdim_v, 64))
-    {
-        ave_time = INVOKE_FMHA_KERNEL(64);
-    }
-    else if(check_hdims(hdim_q, hdim_v, 128))
-    {
+    // if(check_hdims(hdim_q, hdim_v, 32))
+    // {
+    //     ave_time = INVOKE_FMHA_KERNEL(32);
+    // }
+    // else if(check_hdims(hdim_q, hdim_v, 64))
+    // {
+    //     ave_time = INVOKE_FMHA_KERNEL(64);
+    // }
+    // else if(check_hdims(hdim_q, hdim_v, 128))
+    // {
+    if(check_hdims(hdim_q, hdim_v, 128))
         ave_time = INVOKE_FMHA_KERNEL(128);
-    }
+    // }
     else
     {
         std::cerr << "not support hdim, will not run" << std::endl;
@@ -499,6 +550,10 @@ int main(int argc, char* argv[])
     else if(data_type == "bf16")
     {
         return run<ck::bhalf_t>(arg_parser) ? 0 : -2;
+    }
+    else if(data_type == "fp8")
+    {
+        return run<ck::f8_t>(arg_parser) ? 0 : -2;
     }
 
     return -3;

@@ -25,7 +25,7 @@ namespace block {
 
 // a variation of qr/ks/vs, where we use async copy to load k (potentially v in the future)
 template <typename Problem, typename Policy = BlockFmhaPipelineQRKSVSAsyncDefaultPolicy>
-struct BlockFmhaPipelineQRKSVSAsync
+struct BlockFmhaPipelineQRKSVSAsyncFp8
 {
     using QDataType           = remove_cvref_t<typename Problem::QDataType>;
     using KDataType           = remove_cvref_t<typename Problem::KDataType>;
@@ -67,22 +67,16 @@ struct BlockFmhaPipelineQRKSVSAsync
     template <typename QDramBlockWindowTmp,
               typename KDramBlockWindowTmp,
               typename VDramBlockWindowTmp,
-              typename BiasDramBlockWindowTmp,
-              typename QElementFunction,
-              typename KElementFunction,
-              typename VElementFunction,
-              typename BiasElementFunction>
+              typename BiasDramBlockWindowTmp>
     __host__ __device__ auto
-    operator()(const QDramBlockWindowTmp& q_dram_block_window_tmp, // M0*K0 tile
-               const QElementFunction& q_element_func,
-               const KDramBlockWindowTmp& k_dram_block_window_tmp, // N0*K0 tile
-               const KElementFunction& /*k_element_func*/,
-               const VDramBlockWindowTmp& v_dram_block_window_tmp, // N1*K1 tile
-               const VElementFunction& v_element_func,
+    operator()(const QDramBlockWindowTmp& q_dram_block_window_tmp,       // M0*K0 tile
+               const KDramBlockWindowTmp& k_dram_block_window_tmp,       // N0*K0 tile
+               const VDramBlockWindowTmp& v_dram_block_window_tmp,       // N1*K1 tile
                const BiasDramBlockWindowTmp& bias_dram_block_window_tmp, // M0*N0 tile
-               const BiasElementFunction& bias_element_func,
                FmhaMask mask,
-               float scale,
+               float attention_scale,
+               float descale_qk,
+               float descale_sv,
                void* smem_ptr) const
     {
         static_assert(
@@ -153,7 +147,8 @@ struct BlockFmhaPipelineQRKSVSAsync
 
         // TODO: we use async Copy for K, which is inline asm
         // a side effect is we have to use inline asm for q as well
-        auto q = load_tile_raw(q_dram_window);
+        // auto q = load_tile_raw(q_dram_window);
+        auto q = load_tile(q_dram_window);
         __builtin_amdgcn_sched_barrier(0);
 
         using SaccBlockTileType = decltype(gemm_0.MakeCBlockTile());
@@ -228,12 +223,14 @@ struct BlockFmhaPipelineQRKSVSAsync
 
         buffer_load_fence(k_dram_window.GetNumAccess());
 
-        auto q_tile = tile_elementwise_in(q_element_func, q);
+        auto q_tile = q;
         __builtin_amdgcn_sched_barrier(0);
 
         index_t i_total_loops      = 0;
         constexpr index_t k0_loops = kK0BlockLength / kK0;
         constexpr index_t k1_loops = kN0 / kK1;
+
+        attention_scale = attention_scale * descale_qk;
 
         static_assert(1 <= k0_loops);
         static_assert(1 <= k1_loops);
@@ -299,20 +296,14 @@ struct BlockFmhaPipelineQRKSVSAsync
             // STAGE 2, scale, add bias, mask, softmax
             if constexpr(is_null_tile_window(bias_dram_window))
             {
-#if !CK_FMHA_FWD_FAST_EXP2
-                tile_elementwise_inout([&scale](auto& x) { x = x * scale; }, s_acc);
-#endif
+                //
             }
             else
             {
                 tile_elementwise_inout(
                     [&](auto& x, const auto& y) {
-#if !CK_FMHA_FWD_FAST_EXP2
-                        x = scale * x + type_convert<SaccDataType>(bias_element_func(y));
-#else
-                        x = scale * x + math::log2e_v<SaccDataType> *
-                                            type_convert<SaccDataType>(bias_element_func(y));
-#endif
+                        x = attention_scale * x +
+                            math::log2e_v<SaccDataType> * type_convert<SaccDataType>(y);
                     },
                     s_acc,
                     bias_tile);
@@ -364,14 +355,11 @@ struct BlockFmhaPipelineQRKSVSAsync
                                    Sequence<(LdsSeq.At(Number<k0_loops>{})) * kN1, 0>{},
                                    Sequence<(LdsSeq.At(Number<k0_loops>{}) + 1) * kN1, kK1>{});
 
-                store_tile(
-                    v_lds_window_tmp,
-                    tile_elementwise_in(v_element_func, v_shuffle_tmp)); // store the prefetch
+                store_tile(v_lds_window_tmp, v_shuffle_tmp);
             }
             else
             {
-                store_tile(v_lds_window,
-                           tile_elementwise_in(v_element_func, v_buf)); // store the prefetch
+                store_tile(v_lds_window, v_buf);
             }
 
             if constexpr(k1_loops > 1)
@@ -386,23 +374,17 @@ struct BlockFmhaPipelineQRKSVSAsync
             constexpr auto p_spans = decltype(p_compute)::GetDistributedSpans();
             sweep_tile_span(p_spans[Number<0>{}], [&](auto idx0) {
                 constexpr auto i_idx = make_tuple(idx0);
-#if CK_FMHA_FWD_FAST_EXP2
-                auto row_max = scale * m[i_idx];
-#endif
+                auto row_max         = attention_scale * m[i_idx];
                 sweep_tile_span(p_spans[Number<1>{}], [&](auto idx1) {
                     constexpr auto i_j_idx = make_tuple(idx0, idx1);
-#if CK_FMHA_FWD_FAST_EXP2
                     if constexpr(is_null_tile_window(bias_dram_window))
                     {
-                        p_compute(i_j_idx) = math::exp2(scale * s[i_j_idx] - row_max);
+                        p_compute(i_j_idx) = math::exp2(attention_scale * s[i_j_idx] - row_max);
                     }
                     else
                     {
                         p_compute(i_j_idx) = math::exp2(s[i_j_idx] - m[i_idx]);
                     }
-#else
-                    p_compute(i_j_idx)     = math::exp(s[i_j_idx] - m[i_idx]);
-#endif
                 });
             });
 
@@ -414,21 +396,18 @@ struct BlockFmhaPipelineQRKSVSAsync
             constexpr auto o_spans = decltype(o_acc)::GetDistributedSpans();
             sweep_tile_span(o_spans[Number<0>{}], [&](auto idx0) {
                 constexpr auto i_idx = make_tuple(idx0);
-#if CK_FMHA_FWD_FAST_EXP2
-                const auto tmp = [&]() {
+                const auto tmp       = [&]() {
                     if constexpr(is_null_tile_window(bias_dram_window))
                     {
-                        auto row_max = scale * m[i_idx];
-                        return math::exp2(scale * m_old[i_idx] - row_max);
+                        auto row_max = attention_scale * m[i_idx];
+                        return math::exp2(attention_scale * m_old[i_idx] - row_max);
                     }
                     else
                     {
                         return math::exp2(m_old[i_idx] - m[i_idx]);
                     }
                 }();
-#else
-                const auto tmp       = math::exp(m_old[i_idx] - m[i_idx]);
-#endif
+
                 l(i_idx) = tmp * l[i_idx] + rowsum_p[i_idx];
                 sweep_tile_span(o_spans[Number<1>{}], [&](auto idx1) {
                     constexpr auto i_j_idx = make_tuple(idx0, idx1);
@@ -467,14 +446,11 @@ struct BlockFmhaPipelineQRKSVSAsync
                             v_lds_window,
                             Sequence<(LdsSeq.At(Number<k0_loops + i_k1 + 1>{})) * kN1, 0>{},
                             Sequence<(LdsSeq.At(Number<k0_loops + i_k1 + 1>{}) + 1) * kN1, kK1>{});
-                        store_tile(v_lds_window_tmp,
-                                   tile_elementwise_in(v_element_func,
-                                                       v_shuffle_tmp)); // store the prefetch
+                        store_tile(v_lds_window_tmp, v_shuffle_tmp);
                     }
                     else
                     {
-                        store_tile(v_lds_window,
-                                   tile_elementwise_in(v_element_func, v_buf)); // store next v_buf
+                        store_tile(v_lds_window, v_buf);
                     }
                     if constexpr(i_k1 < k1_loops - 1)
                         move_tile_window(v_dram_window, {0, kK1});
@@ -515,7 +491,7 @@ struct BlockFmhaPipelineQRKSVSAsync
 
         sweep_tile_span(o_spans[Number<0>{}], [&](auto idx0) {
             constexpr auto i_idx = make_tuple(idx0);
-            const auto tmp       = [&]() {
+            auto tmp             = [&]() {
                 if constexpr(FmhaMask::IsMasking)
                 {
                     return l[i_idx] == 0.f ? 0.f : 1 / l[i_idx];
@@ -523,6 +499,7 @@ struct BlockFmhaPipelineQRKSVSAsync
                 else
                     return 1 / l[i_idx];
             }();
+            tmp = tmp * descale_sv;
             sweep_tile_span(o_spans[Number<1>{}], [&](auto idx1) {
                 constexpr auto i_j_idx = make_tuple(idx0, idx1);
                 o_acc(i_j_idx) *= tmp;
@@ -530,32 +507,6 @@ struct BlockFmhaPipelineQRKSVSAsync
         });
 
         return o_acc;
-    }
-
-    template <typename QDramBlockWindowTmp,
-              typename KDramBlockWindowTmp,
-              typename VDramBlockWindowTmp,
-              typename BiasDramBlockWindowTmp>
-    __host__ __device__ auto
-    operator()(const QDramBlockWindowTmp& q_dram_block_window_tmp,       // M0*K0 tile
-               const KDramBlockWindowTmp& k_dram_block_window_tmp,       // N0*K0 tile
-               const VDramBlockWindowTmp& v_dram_block_window_tmp,       // N1*K1 tile
-               const BiasDramBlockWindowTmp& bias_dram_block_window_tmp, // M0*N0 tile
-               FmhaMask mask,
-               float scale,
-               void* smem_ptr) const
-    {
-        return operator()(q_dram_block_window_tmp,
-                          identity{},
-                          k_dram_block_window_tmp,
-                          identity{},
-                          v_dram_block_window_tmp,
-                          identity{},
-                          bias_dram_block_window_tmp,
-                          identity{},
-                          mask,
-                          scale,
-                          smem_ptr);
     }
 };
 

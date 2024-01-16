@@ -24,11 +24,12 @@ struct FmhaFwdKernel
     static constexpr ck::index_t kBlockSize  = FmhaPipeline::kBlockSize;
     static constexpr ck::index_t kBlockPerCu = FmhaPipeline::kBlockPerCu;
 
-    using QDataType    = ck::remove_cvref_t<typename FmhaPipeline::QDataType>;
-    using KDataType    = ck::remove_cvref_t<typename FmhaPipeline::KDataType>;
-    using VDataType    = ck::remove_cvref_t<typename FmhaPipeline::VDataType>;
-    using BiasDataType = ck::remove_cvref_t<typename FmhaPipeline::BiasDataType>;
-    using ODataType    = ck::remove_cvref_t<typename FmhaPipeline::ODataType>;
+    using QDataType              = ck::remove_cvref_t<typename FmhaPipeline::QDataType>;
+    using KDataType              = ck::remove_cvref_t<typename FmhaPipeline::KDataType>;
+    using VDataType              = ck::remove_cvref_t<typename FmhaPipeline::VDataType>;
+    using BiasDataType           = ck::remove_cvref_t<typename FmhaPipeline::BiasDataType>;
+    using ODataType              = ck::remove_cvref_t<typename FmhaPipeline::ODataType>;
+    static constexpr bool kIsFp8 = FmhaPipeline::kIsFp8;
 
     using VLayout = ck::remove_cvref_t<typename FmhaPipeline::VLayout>;
 
@@ -93,10 +94,18 @@ struct FmhaFwdKernel
         ck::index_t mask_y, mask_x;
     };
 
+    struct FmhaFwdFP8Kargs
+    {
+        float descale_qk; // q*k
+        float descale_sv; // s*v
+        // float * o_amax_ptr;
+    };
+
     struct FmhaFwdBatchModeKargs
         : FmhaFwdCommonKargs,
           std::conditional_t<kHasBias, FmhaFwdBatchModeBiasKargs, FmhaFwdEmptyKargs<0>>,
-          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
+          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>,
+          std::conditional_t<kIsFp8, FmhaFwdFP8Kargs, FmhaFwdEmptyKargs<2>>
     {
         ck::index_t batch_stride_q;
         ck::index_t batch_stride_k;
@@ -107,7 +116,8 @@ struct FmhaFwdKernel
     struct FmhaFwdGroupModeKargs
         : FmhaFwdCommonKargs,
           std::conditional_t<kHasBias, FmhaFwdCommonBiasKargs, FmhaFwdEmptyKargs<0>>,
-          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>
+          std::conditional_t<kHasMask, FmhaFwdMaskKargs, FmhaFwdEmptyKargs<1>>,
+          std::conditional_t<kIsFp8, FmhaFwdFP8Kargs, FmhaFwdEmptyKargs<2>>
     {
         const int32_t* seqstart_q_ptr;
         const int32_t* seqstart_k_ptr;
@@ -144,7 +154,9 @@ struct FmhaFwdKernel
                                                                       ck::index_t batch_stride_bias,
                                                                       ck::index_t batch_stride_o,
                                                                       ck::index_t mask_y,
-                                                                      ck::index_t mask_x)
+                                                                      ck::index_t mask_x,
+                                                                      float descale_qk,
+                                                                      float descale_sv)
     {
         Kargs kargs{{q_ptr,
                      k_ptr,
@@ -170,6 +182,7 @@ struct FmhaFwdKernel
                      nhead_stride_o}, // args for common karg
                     {},               // placeholder for bias
                     {},               // placeholder for mask
+                    {},               // placeholder for fp8 args
                     batch_stride_q,
                     batch_stride_k,
                     batch_stride_v,
@@ -187,6 +200,11 @@ struct FmhaFwdKernel
         {
             kargs.mask_y = mask_y;
             kargs.mask_x = mask_x;
+        }
+        if constexpr(kIsFp8)
+        {
+            kargs.descale_qk = descale_qk;
+            kargs.descale_sv = descale_sv;
         }
 
         return kargs;
@@ -216,7 +234,9 @@ struct FmhaFwdKernel
                                                                       ck::index_t nhead_stride_bias,
                                                                       ck::index_t nhead_stride_o,
                                                                       ck::index_t mask_y,
-                                                                      ck::index_t mask_x)
+                                                                      ck::index_t mask_x,
+                                                                      float descale_qk,
+                                                                      float descale_sv)
     {
         Kargs kargs{{q_ptr,
                      k_ptr,
@@ -242,6 +262,7 @@ struct FmhaFwdKernel
                      nhead_stride_o}, // args for common karg
                     {},               // placeholder for bias
                     {},               // placeholder for mask
+                    {},               // placeholder for fp8 args
                     reinterpret_cast<const int32_t*>(seqstart_q_ptr),
                     reinterpret_cast<const int32_t*>(seqstart_k_ptr),
                     reinterpret_cast<const int32_t*>(seqlen_k_ptr)};
@@ -256,6 +277,11 @@ struct FmhaFwdKernel
         {
             kargs.mask_y = mask_y;
             kargs.mask_x = mask_x;
+        }
+        if constexpr(kIsFp8)
+        {
+            kargs.descale_qk = descale_qk;
+            kargs.descale_sv = descale_sv;
         }
 
         return kargs;
@@ -549,16 +575,30 @@ struct FmhaFwdKernel
                 return FmhaMask{kargs.seqlen_q, kargs.seqlen_k};
         }();
 
-        auto o_acc_tile =
-            FmhaPipeline{}(q_dram_window,
-                           k_dram_window,
-                           v_dram_window,
-                           bias_dram_window,
-                           mask,
-                           kargs.scale,
-                           // ck::math::integer_divide_ceil(kargs.seqlen_k, FmhaPipeline::kN0),
-                           // ck::math::integer_divide_ceil(kargs.hdim_q, FmhaPipeline::kK0),
-                           smem_ptr);
+        auto o_acc_tile = [&]() {
+            if constexpr(kIsFp8)
+            {
+                return FmhaPipeline{}(q_dram_window,
+                                      k_dram_window,
+                                      v_dram_window,
+                                      bias_dram_window,
+                                      mask,
+                                      kargs.scale,
+                                      kargs.descale_qk,
+                                      kargs.descale_sv,
+                                      smem_ptr);
+            }
+            else
+            {
+                return FmhaPipeline{}(q_dram_window,
+                                      k_dram_window,
+                                      v_dram_window,
+                                      bias_dram_window,
+                                      mask,
+                                      kargs.scale,
+                                      smem_ptr);
+            }
+        }();
 
         // O DRAM and O DRAM window
         auto o_dram = [&]() {

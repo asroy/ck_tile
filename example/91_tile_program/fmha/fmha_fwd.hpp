@@ -11,7 +11,9 @@
 #include "ck/tile_program/block_tile/block_masking.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_problem.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs.hpp"
+#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_fp8.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async.hpp"
+#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async_fp8.hpp"
 #include "ck/tile_program/tile/tile_fmha_shape.hpp"
 #include "ck/tile_program/tile/tile_fmha_traits.hpp"
 
@@ -48,6 +50,34 @@ struct FmhaFwdTypeConfig<ck::bhalf_t>
     using PDataType           = ck::bhalf_t; // data type for A matrix of second gemm
     using OaccDataType        = float;       // data type for second gemm accumulation
     using ODataType           = ck::bhalf_t;
+};
+
+template <>
+struct FmhaFwdTypeConfig<ck::f8_t>
+{
+    using QDataType           = ck::f8_t;
+    using KDataType           = ck::f8_t;
+    using VDataType           = ck::f8_t;
+    using BiasDataType        = float;    // TODO: fix me
+    using SaccDataType        = float;    // data type for first gemm accumulation
+    using SMPLComputeDataType = float;    // data type for reduction, softmax
+    using PDataType           = ck::f8_t; // data type for A matrix of second gemm
+    using OaccDataType        = float;    // data type for second gemm accumulation
+    using ODataType           = ck::f8_t;
+};
+
+template <>
+struct FmhaFwdTypeConfig<ck::bf8_t>
+{
+    using QDataType           = ck::bf8_t;
+    using KDataType           = ck::bf8_t;
+    using VDataType           = ck::bf8_t;
+    using BiasDataType        = ck::bf8_t;
+    using SaccDataType        = float;     // data type for first gemm accumulation
+    using SMPLComputeDataType = float;     // data type for reduction, softmax
+    using PDataType           = ck::bf8_t; // data type for A matrix of second gemm
+    using OaccDataType        = float;     // data type for second gemm accumulation
+    using ODataType           = ck::bf8_t;
 };
 
 // default settings for FmhaFwdKernelSelector<> type alias
@@ -135,7 +165,6 @@ using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<
     typename FmhaFwdTypeConfig<DataType>::PDataType,
     typename FmhaFwdTypeConfig<DataType>::OaccDataType,
     typename FmhaFwdTypeConfig<DataType>::ODataType,
-    /* BlockSize = */ HDim == 32 ? 128 : 256,
     FmhaShape<HDim>,
     kIsGroupMode,
     FmhaMask,
@@ -175,6 +204,8 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                      ck::index_t hdim_v,
                                      ck::index_t max_seqlen_q,
                                      float scale,
+                                     float descale_qk,
+                                     float descale_sv,
                                      bool i_perm,
                                      bool o_perm,
                                      ck::index_t mask_y,
@@ -243,7 +274,9 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                          nhead_stride_bias,
                                          nhead_stride_o,
                                          mask_y,
-                                         mask_x);
+                                         mask_x,
+                                         descale_qk,
+                                         descale_sv);
         }
         else
         { // create batch mode kernel arguments
@@ -274,12 +307,70 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                          batch_stride_bias,
                                          batch_stride_o,
                                          mask_y,
-                                         mask_x);
+                                         mask_x,
+                                         descale_qk,
+                                         descale_sv);
         }
     }();
 
     dim3 grids = FmhaKernel::GridSize(batch, nhead, max_seqlen_q, hdim_v);
     return ck::make_tuple(kargs, grids);
+}
+
+// This is the args from caller to underneath API, different from the kernel
+struct fmha_fwd_args
+{
+    const void* q_ptr;
+    const void* k_ptr;
+    const void* v_ptr;
+    const void* bias_ptr;
+    void* o_ptr;
+    const void* seqstart_q_ptr;
+    const void* seqstart_k_ptr;
+    const void* seqlen_k_ptr;
+    ck::index_t batch;
+    ck::index_t nhead;
+    ck::index_t nhead_k;
+    ck::index_t seqlen_q;
+    ck::index_t seqlen_k;
+    ck::index_t hdim_q;
+    ck::index_t hdim_v;
+    ck::index_t max_seqlen_q;
+    float scale;
+    float descale_qk;
+    float descale_sv;
+    bool i_perm;
+    bool o_perm;
+    ck::index_t mask_y;
+    ck::index_t mask_x;
+};
+
+template <typename FmhaKernel>
+auto fmha_fwd_create_kargs_and_grids(fmha_fwd_args args)
+{
+    return fmha_fwd_create_kargs_and_grids<FmhaKernel>(args.q_ptr,
+                                                       args.k_ptr,
+                                                       args.v_ptr,
+                                                       args.bias_ptr,
+                                                       args.o_ptr,
+                                                       args.seqstart_q_ptr,
+                                                       args.seqstart_k_ptr,
+                                                       args.seqlen_k_ptr,
+                                                       args.batch,
+                                                       args.nhead,
+                                                       args.nhead_k,
+                                                       args.seqlen_q,
+                                                       args.seqlen_k,
+                                                       args.hdim_q,
+                                                       args.hdim_v,
+                                                       args.max_seqlen_q,
+                                                       args.scale,
+                                                       args.descale_qk,
+                                                       args.descale_sv,
+                                                       args.i_perm,
+                                                       args.o_perm,
+                                                       args.mask_y,
+                                                       args.mask_x);
 }
 
 // will instantiate this function across different source file
@@ -295,3 +386,20 @@ float fmha_fwd_run(const StreamConfig&, typename FmhaKernel::Kargs, dim3);
         constexpr ck::index_t kBlockPerCu = KERNEL_::kBlockPerCu;                                \
         return launch_kernel<blocks.x, kBlockPerCu>(stream, KERNEL_{}, grids, blocks, 0, kargs); \
     }
+
+template <ck::index_t HDim_,
+          typename DataType_,
+          bool kIsGroupMode_,
+          typename FmhaMask_,
+          bool kHasBias_>
+struct fmha_fwd_traits
+{
+    static constexpr ck::index_t HDim  = HDim_;
+    using DataType                     = ck::remove_cvref_t<DataType_>;
+    static constexpr bool kIsGroupMode = kIsGroupMode_;
+    using FmhaMask                     = ck::remove_cvref_t<FmhaMask_>;
+    static constexpr bool kHasBias     = kHasBias_;
+};
+
+template <typename Traits_>
+float fmha_fwd_(const StreamConfig&, fmha_fwd_args);
