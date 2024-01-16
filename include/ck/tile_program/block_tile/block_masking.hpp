@@ -13,9 +13,9 @@ namespace block {
 
 enum class GenericAttentionMaskType
 {
-    CausalTopLeft = 1,
+    CausalMaskDisabled = 0,
+    CausalTopLeft,
     CausalBottomRight,
-    CausalMaskDisabled,
 };
 
 // clang-format off
