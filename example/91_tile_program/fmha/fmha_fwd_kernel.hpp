@@ -563,13 +563,16 @@ struct FmhaFwdKernel
 
                 if(kargs.mask_type == MaskType::CausalMaskDisabled)
                 {
-                    mask_coord(ck::Number<0>{}) = kargs.mask_left_size;
-                    mask_coord(ck::Number<1>{}) = kargs.mask_right_size;
+                    mask_coord = ck::make_generic_attention_mask_coordinate_from_lr_window(
+                        kargs.mask_left_size,
+                        kargs.mask_right_size,
+                        kargs.seqlen_q,
+                        kargs.seqlen_k);
                 }
                 else
                 {
                     mask_coord = ck::make_generic_attention_mask_coordinate_from_lr_window(
-                        -1,
+                        kargs.mask_left_size,
                         0,
                         kargs.seqlen_q,
                         kargs.seqlen_k,

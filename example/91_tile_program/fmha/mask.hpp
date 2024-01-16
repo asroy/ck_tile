@@ -50,13 +50,16 @@ struct mask_info
                 throw std::invalid_argument(
                     std::string("cannot construct mask_info from string: ") + str);
             }
-            mask.type       = mask_info::MaskType::CausalMaskDisabled;
-            mask.left_size  = atoi(v.substr(0, found_1).c_str());
-            mask.right_size = atoi(v.substr(found_1 + 1).c_str());
+            mask.type      = mask_info::MaskType::CausalMaskDisabled;
+            ck::index_t v0 = atoi(v.substr(0, found_1).c_str());
+            ck::index_t v1 = atoi(v.substr(found_1 + 1).c_str());
 
             // TODO: some validation
             if(t == "t" || t == "b")
             {
+                mask.left_size  = v0;
+                mask.right_size = v1;
+
                 auto r = ck::make_generic_attention_mask_coordinate_from_lr_window(
                     mask.left_size, mask.right_size, y_total, x_total, t == "t");
                 mask.y = r.At(ck::Number<0>{});
@@ -64,8 +67,11 @@ struct mask_info
             }
             else if(t == "g")
             {
-                mask.y = mask.left_size;
-                mask.x = mask.right_size;
+                mask.left_size  = v0 - 1;
+                mask.right_size = v1 - 1;
+
+                mask.y = v0;
+                mask.x = v1;
             }
             else
             {
