@@ -86,21 +86,24 @@ struct mask_info
             }
 
             mask.type = static_cast<mask_info::MaskType>(chosen_type);
-            if(mask.type == mask_info::MaskType::CausalTopLeft)
+            if(mask.type == mask_info::MaskType::CausalTopLeft ||
+               mask.type == mask_info::MaskType::CausalBottomRight)
             {
                 mask.left_size  = -1;
                 mask.right_size = 0;
 
-                mask.y = seqlen_q;
-                mask.x = 1;
-            }
-            else if(mask.type == mask_info::MaskType::CausalBottomRight)
-            {
-                mask.left_size  = -1;
-                mask.right_size = 0;
+                auto r = ck::make_generic_attention_mask_coordinate_from_lr_window(
+                    mask.left_size,
+                    mask.right_size,
+                    y_total,
+                    x_total,
+                    mask.type == mask_info::MaskType::CausalTopLeft);
 
-                mask.y = seqlen_q;
-                mask.x = seqlen_k - seqlen_q + 1;
+                // (y, x) values in each cases:
+                //   CausalTopLeft: (y, x) = (seqlen_q, 1)
+                //   CausalBottomRight: (y, x) = (seqlen_q, seqlen_k - seqlen_q + 1)
+                mask.y = r.At(ck::Number<0>{});
+                mask.x = r.At(ck::Number<1>{});
             }
             else
             {

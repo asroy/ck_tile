@@ -569,11 +569,11 @@ struct FmhaFwdKernel
                 else
                 {
                     mask_coord = ck::make_generic_attention_mask_coordinate_from_lr_window(
-                        kargs.mask_left_size,
-                        kargs.mask_right_size,
+                        -1,
+                        0,
                         kargs.seqlen_q,
                         kargs.seqlen_k,
-                        kargs.mask_type != MaskType::CausalBottomRight);
+                        kargs.mask_type == MaskType::CausalTopLeft);
                 }
 
                 auto y = mask_coord.At(ck::Number<0>{});
