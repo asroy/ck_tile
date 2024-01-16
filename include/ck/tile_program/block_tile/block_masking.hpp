@@ -203,8 +203,8 @@ make_generic_attention_mask_coordinate_from_lr_window(index_t left_size,
         if(right_size < 0)
             right_size = x_total - 1;
 
-        x = 1 + right_size;
         y = left_size + 1;
+        x = 1 + right_size;
     }
     else
     {
@@ -213,8 +213,8 @@ make_generic_attention_mask_coordinate_from_lr_window(index_t left_size,
         if(right_size < 0)
             right_size = y_total - 1;
 
-        x = x_total - y_total + 1 + right_size;
         y = y_total - x_total + 1 + left_size;
+        x = x_total - y_total + 1 + right_size;
     }
 
     return ck::make_tuple(y, x);
