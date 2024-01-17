@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstring>
+#include <functional>
 #include <numeric>
 #include <ostream>
 #include <string>
@@ -271,7 +272,7 @@ bool run(const ArgParser& arg_parser)
                       : get_lengths(i_perm, shape_batch, nhead_k, hdim_v, shape_seqlen_k));
     // use bias shape = [1, 1, shape_seqlen_q, shape_seqlen_k]. if use_bias=false, the bias_host
     // will not be used for verification at all (but will be copied to device anyway).
-    Tensor<KDataType> bias_host(
+    Tensor<BiasDataType> bias_host(
         use_bias ? get_lengths(i_perm, 1, 1, shape_seqlen_q, shape_seqlen_k)
                  : std::array<ck::index_t, 4>{1, 1, 1, 1} /* dummy shape for simplifying code */);
     // self define lse data layout as [shape_batch, nhead, shape_seqlen_q]
@@ -363,12 +364,22 @@ bool run(const ArgParser& arg_parser)
         mask.y,                                                                \
         mask.x)
 
-    float ave_time = 0;
-    if(hdim_q == hdim_v && hdim_q == 64)
+    float ave_time         = 0;
+    const auto check_hdims = [](ck::index_t hdim_q_, ck::index_t hdim_v_, ck::index_t threshold) {
+        const auto compare =
+            std::conditional_t<kK0N1NeedPadding, std::less_equal<>, std::equal_to<>>{};
+        return compare(hdim_q_, threshold) && compare(hdim_v_, threshold);
+    };
+
+    if(check_hdims(hdim_q, hdim_v, 32))
+    {
+        ave_time = INVOKE_FMHA_KERNEL(32);
+    }
+    else if(check_hdims(hdim_q, hdim_v, 64))
     {
         ave_time = INVOKE_FMHA_KERNEL(64);
     }
-    else if(hdim_q == hdim_v && hdim_q == 128)
+    else if(check_hdims(hdim_q, hdim_v, 128))
     {
         ave_time = INVOKE_FMHA_KERNEL(128);
     }

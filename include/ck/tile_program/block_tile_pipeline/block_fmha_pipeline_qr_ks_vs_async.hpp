@@ -56,6 +56,7 @@ struct BlockFmhaPipelineQRKSVSAsync
     static constexpr bool kIsGroupMode     = Problem::kIsGroupMode;
     static constexpr bool kM0NeedPadding   = Problem::kM0NeedPadding;
     static constexpr bool kN0K1NeedPadding = Problem::kN0K1NeedPadding;
+    static constexpr bool kK0N1NeedPadding = Problem::kK0N1NeedPadding;
     static constexpr bool kHasBias         = Problem::kHasBias;
     static constexpr bool kStoreLSE        = Problem::kStoreLSE;
 
@@ -243,6 +244,8 @@ struct BlockFmhaPipelineQRKSVSAsync
         constexpr index_t k0_loops = kK0BlockLength / kK0;
         constexpr index_t k1_loops = kN0 / kK1;
 
+        static_assert(1 <= k0_loops);
+        static_assert(1 <= k1_loops);
         // main loop
         do
         {
