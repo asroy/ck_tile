@@ -48,7 +48,7 @@ void reference_batched_softmax(
                 ck::type_convert<BDataType>(ck::math::exp(v_a - v_max) * inv_sum);
         }
         // lse
-        if(!std::is_same<decltype(lse_b_m), decltype(std::nullopt)>::value)
+        if(lse_b_m)
         {
             lse_b_m->get()(batch, m) = v_max + ck::math::log(v_exp_sum);
         }
