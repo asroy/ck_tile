@@ -217,7 +217,6 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
             return i_perm ? seqlen_k : nhead_k * seqlen_k;
     }();
     const ck::index_t stride_bias = (i_perm ? seqlen_k : 1 * seqlen_k);
-    const ck::index_t stride_lse  = 1;
     const ck::index_t stride_o    = (o_perm ? hdim_v : nhead * hdim_v);
     // setup nhead_stride_* arguments
     const ck::index_t nhead_stride_q = (i_perm ? seqlen_q * hdim_q : hdim_q);
@@ -260,7 +259,6 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                          stride_k,
                                          stride_v,
                                          stride_bias,
-                                         stride_lse,
                                          stride_o,
                                          nhead_stride_q,
                                          nhead_stride_k,
@@ -289,7 +287,6 @@ auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
                                          stride_k,
                                          stride_v,
                                          stride_bias,
-                                         stride_lse,
                                          stride_o,
                                          nhead_stride_q,
                                          nhead_stride_k,
