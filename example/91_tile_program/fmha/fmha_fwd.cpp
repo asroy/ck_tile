@@ -55,7 +55,6 @@ auto create_args(int argc, char* argv[])
                 "if true, will be b*h*s*d, else b*s*h*d")
         .insert("operm", "1", "permute output")
         .insert("bias", "0", "add bias or not")
-        .insert("lse", "0", "0 not store lse, 1 store lse")
         .insert("prec", "fp16", "data type. fp16 or bf16")
         .insert("mask",
                 "0",
@@ -63,6 +62,7 @@ auto create_args(int argc, char* argv[])
                 "'t:l,r', top-left local-attn with left right size\n"
                 "'b:l,r', bottom-r local-attn with left right size\n"
                 "'g:y,x', generic attention mask coordinate with y/x size\n")
+        .insert("lse", "0", "0 not store lse, 1 store lse")
         .insert("init", "1", "init method. 0:random int, 1:random float, 2:trig float");
 
     bool result = arg_parser.parse(argc, argv);
@@ -78,11 +78,11 @@ struct fmha_fwd_kernel_invoker
     // args that may passed as karg shoule use operator()
     mode_enum mode;
     bool use_bias;
-    bool store_lse;
     mask_info mask;
+    bool store_lse;
 
-    fmha_fwd_kernel_invoker(mode_enum mode_, bool use_bias_, bool store_lse_, mask_info mask_)
-        : mode(mode_), use_bias(use_bias_), store_lse(store_lse_), mask(mask_)
+    fmha_fwd_kernel_invoker(mode_enum mode_, bool use_bias_, mask_info mask_, bool store_lse_)
+        : mode(mode_), use_bias(use_bias_), mask(mask_), store_lse(store_lse_)
     {
     }
 
@@ -338,7 +338,7 @@ bool run(const ArgParser& arg_parser)
               << ", v:" << std::string(VLayout::name)[0] << std::flush;
 
 #define INVOKE_FMHA_KERNEL(hdim_)                                              \
-    fmha_fwd_kernel_invoker<hdim_, DataType>{mode, use_bias, store_lse, mask}( \
+    fmha_fwd_kernel_invoker<hdim_, DataType>{mode, use_bias, mask, store_lse}( \
         stream_config,                                                         \
         q_buf.GetDeviceBuffer(),                                               \
         k_buf.GetDeviceBuffer(),                                               \
