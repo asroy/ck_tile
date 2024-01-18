@@ -83,7 +83,7 @@ struct FmhaBlockTile</* HDim = */ 128> : ck::Sequence<128, 128, 32, 128, 32, 128
 };
 #if CK_FMHA_FWD_SUPPORT_HDIM_256
 template <>
-struct FmhaBlockTile</* HDim = */ 256> : ck::Sequence<128, 128, 32, 256, 32, 256>
+struct FmhaBlockTile</* HDim = */ 256> : ck::Sequence<128, 128, 64, 128, 32, 256>
 {
 };
 #endif
