@@ -12,6 +12,7 @@
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_problem.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async.hpp"
+#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qs_ks_vs.hpp"
 #include "ck/tile_program/tile/tile_fmha_shape.hpp"
 #include "ck/tile_program/tile/tile_fmha_traits.hpp"
 
@@ -80,6 +81,12 @@ template <>
 struct FmhaBlockTile</* HDim = */ 128> : ck::Sequence<128, 128, 32, 128, 32, 128>
 {
 };
+#if CK_FMHA_FWD_SUPPORT_HDIM_256
+template <>
+struct FmhaBlockTile</* HDim = */ 256> : ck::Sequence<128, 128, 32, 256, 32, 256>
+{
+};
+#endif
 using FmhaBlockWarps = ck::Sequence<4, 1, 1>;
 using FmhaWarpTile   = ck::Sequence<32, 32, 16>;
 
@@ -117,6 +124,19 @@ struct FmhaShape</* HDim = */ 128>
 {
 };
 
+#if CK_FMHA_FWD_SUPPORT_HDIM_256
+template <>
+struct FmhaShape</* HDim = */ 256>
+    : ck::tile_program::TileFmhaShape<FmhaBlockTile</* HDim = */ 256>,
+                                      FmhaBlockWarps,
+                                      FmhaWarpTile,
+                                      FmhaBlockWarps,
+                                      FmhaWarpTile,
+                                      VLayout>
+{
+};
+#endif
+
 template <ck::index_t HDim, bool kHasBias>
 using FmhaTraits = ck::tile_program::TileFmhaTraits<kM0NeedPadding,
                                                     kN0K1NeedPadding,
@@ -142,8 +162,13 @@ using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<
     FmhaTraits<HDim, kHasBias>>;
 
 template <ck::index_t HDim, typename DataType, bool kIsGroupMode, typename FmhaMask, bool kHasBias>
-using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync<
-    FmhaPipelineProblem<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>>;
+using FmhaPipeline =
+#if CK_FMHA_FWD_SUPPORT_HDIM_256
+    ck::tile_program::block::BlockFmhaPipelineQSKSVS
+#else
+    ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync
+#endif
+    <FmhaPipelineProblem<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias>>;
 
 template <typename DataType>
 using FmhaEpilogue =
