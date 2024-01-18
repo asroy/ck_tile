@@ -703,7 +703,7 @@ struct BlockFmhaPipelineQRKSVSCustomPolicy
             }
             else if constexpr(Problem::kIsFp8)
             {
-                constexpr index_t swizzle_factor = 4;
+                constexpr index_t swizzle_factor = 4; // TODO: hard coded here
                 return warp::WarpGemmImpl<
                     warp::WarpGemmAtrributeMfmaIterateKAndTransposedCDistribution_SwizzleB<
                         warp::WarpGemmAttributeMfmaImpl_f32_32x32x16_f8_base<

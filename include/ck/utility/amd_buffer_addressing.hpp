@@ -603,6 +603,36 @@ __device__ typename vector_type<T, N>::type amd_buffer_load_impl(int32x4_t src_w
 
             return tmp.AsType<float8_t>()(Number<0>{});
         }
+        else if constexpr(N == 16)
+        {
+            vector_type<float, 16> tmp;
+
+            tmp.AsType<float4_t>()(Number<0>{}) =
+                llvm_amdgcn_raw_buffer_load_fp32x4(src_wave_buffer_resource,
+                                                   src_thread_addr_offset,
+                                                   src_wave_addr_offset,
+                                                   static_cast<index_t>(coherence));
+
+            tmp.AsType<float4_t>()(Number<1>{}) =
+                llvm_amdgcn_raw_buffer_load_fp32x4(src_wave_buffer_resource,
+                                                   src_thread_addr_offset,
+                                                   src_wave_addr_offset + 4 * sizeof(float),
+                                                   static_cast<index_t>(coherence));
+
+            tmp.AsType<float4_t>()(Number<2>{}) =
+                llvm_amdgcn_raw_buffer_load_fp32x4(src_wave_buffer_resource,
+                                                   src_thread_addr_offset,
+                                                   src_wave_addr_offset + 8 * sizeof(float),
+                                                   static_cast<index_t>(coherence));
+
+            tmp.AsType<float4_t>()(Number<3>{}) =
+                llvm_amdgcn_raw_buffer_load_fp32x4(src_wave_buffer_resource,
+                                                   src_thread_addr_offset,
+                                                   src_wave_addr_offset + 12 * sizeof(float),
+                                                   static_cast<index_t>(coherence));
+
+            return tmp.AsType<float16_t>()(Number<0>{});
+        }
     }
     else if constexpr(is_same<T, half_t>::value) // fp16
     {

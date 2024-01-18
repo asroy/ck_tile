@@ -85,39 +85,32 @@ __device__ auto cast_tile_pk_fp8x4(const InDstrTensors& in_dstr_tensors)
     constexpr index_t thread_buffer_size_pk = thread_buffer_size / 4;
 
     auto out_dstr_tensor = make_static_distributed_tensor<OutDataType>(in_tile_dstr);
-
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wuninitialized"
+    // __builtin_amdgcn_cvt_pk_fp8_f32() this builtin require the old value, and
+    // will generate a v_mov_b32 vxxx [old] before cvt, which result in unwanted ISA
+    // so we prepare an uninitialized variable purposely, and turn off the warning
+    int dummy_old;
     static_for<0, thread_buffer_size_pk, 1>{}([&](auto i) {
         uint32_t x =
             __builtin_amdgcn_cvt_pk_fp8_f32(in_dstr_tensors.GetThreadBuffer()[Number<4 * i + 0>{}],
                                             in_dstr_tensors.GetThreadBuffer()[Number<4 * i + 1>{}],
-                                            0,
+                                            dummy_old,
                                             false); // false -> WORD0
 
         uint32_t y =
             __builtin_amdgcn_cvt_pk_fp8_f32(in_dstr_tensors.GetThreadBuffer()[Number<4 * i + 2>{}],
                                             in_dstr_tensors.GetThreadBuffer()[Number<4 * i + 3>{}],
-                                            0,
+                                            dummy_old,
                                             false); // false -> WORD0
 
         constexpr int32_t m0 = 0x05040100;
+        using vec_t          = typename vector_type<OutDataType, 4>::type;
 
-        uint32_t d = __builtin_amdgcn_perm(y, x, m0);
-
-        union
-        {
-            uint32_t data;
-            struct
-            {
-                uint8_t d[4];
-            };
-        } pool;
-        pool.data = d;
-
-        out_dstr_tensor.GetThreadBuffer()(Number<4 * i + 0>{}) = pool.d[0];
-        out_dstr_tensor.GetThreadBuffer()(Number<4 * i + 1>{}) = pool.d[1];
-        out_dstr_tensor.GetThreadBuffer()(Number<4 * i + 2>{}) = pool.d[2];
-        out_dstr_tensor.GetThreadBuffer()(Number<4 * i + 3>{}) = pool.d[3];
+        vec_t d = bit_cast<vec_t>(__builtin_amdgcn_perm(y, x, m0));
+        out_dstr_tensor.GetThreadBuffer().template SetAsType<vec_t>(Number<4 * i>{}, d);
     });
+#pragma clang diagnostic pop
 
     return out_dstr_tensor;
 }
