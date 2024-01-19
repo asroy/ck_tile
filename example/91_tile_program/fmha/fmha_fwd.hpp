@@ -14,6 +14,7 @@
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_fp8.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async_fp8.hpp"
+#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qs_ks_vs.hpp"
 #include "ck/tile_program/tile/tile_fmha_shape.hpp"
 #include "ck/tile_program/tile/tile_fmha_traits.hpp"
 
@@ -112,6 +113,10 @@ template <>
 struct FmhaBlockTile</* HDim = */ 128> : ck::Sequence<128, 128, 32, 128, 32, 128>
 {
 };
+template <>
+struct FmhaBlockTile</* HDim = */ 256> : ck::Sequence<128, 128, 32, 256, 32, 256>
+{
+};
 using FmhaBlockWarps = ck::Sequence<4, 1, 1>;
 using FmhaWarpTile   = ck::Sequence<32, 32, 16>;
 
@@ -141,6 +146,17 @@ struct FmhaShape</* HDim = */ 64> : ck::tile_program::TileFmhaShape<FmhaBlockTil
 template <>
 struct FmhaShape</* HDim = */ 128>
     : ck::tile_program::TileFmhaShape<FmhaBlockTile</* HDim = */ 128>,
+                                      FmhaBlockWarps,
+                                      FmhaWarpTile,
+                                      FmhaBlockWarps,
+                                      FmhaWarpTile,
+                                      VLayout>
+{
+};
+
+template <>
+struct FmhaShape</* HDim = */ 256>
+    : ck::tile_program::TileFmhaShape<FmhaBlockTile</* HDim = */ 256>,
                                       FmhaBlockWarps,
                                       FmhaWarpTile,
                                       FmhaBlockWarps,

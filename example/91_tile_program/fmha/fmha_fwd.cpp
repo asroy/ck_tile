@@ -433,7 +433,10 @@ bool run(const ArgParser& arg_parser)
     // {
     if(check_hdims(hdim_q, hdim_v, 128))
         ave_time = INVOKE_FMHA_KERNEL(128);
-    // }
+    else if(check_hdims(hdim_q, hdim_v, 256))
+    {
+        ave_time = INVOKE_FMHA_KERNEL(256);
+    }
     else
     {
         std::cerr << "not support hdim, will not run" << std::endl;
