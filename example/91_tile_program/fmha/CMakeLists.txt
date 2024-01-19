@@ -25,10 +25,6 @@ if(NOT DEFINED FMHA_FWD_FAST_EXP2)
     set(FMHA_FWD_FAST_EXP2 true)
 endif()
 
-if(NOT DEFINED FMHA_FWD_SUPPORT_HDIM_256)
-    set(FMHA_FWD_SUPPORT_HDIM_256 false)
-endif()
-
 set(EXAMPLE_FMHA_FWD_COMPILE_OPTIONS)
 
 # NOTE: we turn off undefined-func-template to let source compile without explicit declare function specializations
@@ -37,12 +33,6 @@ if(FMHA_FWD_FAST_EXP2)
 list(APPEND EXAMPLE_FMHA_FWD_COMPILE_OPTIONS -Wno-undefined-func-template -DCK_FMHA_FWD_FAST_EXP2=1 -fgpu-flush-denormals-to-zero)
 else()
 list(APPEND EXAMPLE_FMHA_FWD_COMPILE_OPTIONS -Wno-undefined-func-template -DCK_FMHA_FWD_FAST_EXP2=0)
-endif()
-
-if(FMHA_FWD_SUPPORT_HDIM_256)
-list(APPEND EXAMPLE_FMHA_FWD_COMPILE_OPTIONS -DCK_FMHA_FWD_SUPPORT_HDIM_256=1)
-else()
-list(APPEND EXAMPLE_FMHA_FWD_COMPILE_OPTIONS -DCK_FMHA_FWD_SUPPORT_HDIM_256=0)
 endif()
 
 target_compile_options(${EXAMPLE_FMHA_FWD} PRIVATE ${EXAMPLE_FMHA_FWD_COMPILE_OPTIONS})

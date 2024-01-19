@@ -83,12 +83,10 @@ template <>
 struct FmhaBlockTile</* HDim = */ 128> : ck::Sequence<128, 128, 32, 128, 32, 128>
 {
 };
-#if CK_FMHA_FWD_SUPPORT_HDIM_256
 template <>
 struct FmhaBlockTile</* HDim = */ 256> : ck::Sequence<128, 128, 32, 256, 32, 256>
 {
 };
-#endif
 using FmhaBlockWarps = ck::Sequence<4, 1, 1>;
 using FmhaWarpTile   = ck::Sequence<32, 32, 16>;
 
@@ -126,7 +124,6 @@ struct FmhaShape</* HDim = */ 128>
 {
 };
 
-#if CK_FMHA_FWD_SUPPORT_HDIM_256
 template <>
 struct FmhaShape</* HDim = */ 256>
     : ck::tile_program::TileFmhaShape<FmhaBlockTile</* HDim = */ 256>,
@@ -137,7 +134,6 @@ struct FmhaShape</* HDim = */ 256>
                                       VLayout>
 {
 };
-#endif
 
 template <ck::index_t HDim, bool kHasBias, bool kStoreLSE>
 using FmhaTraits = ck::tile_program::TileFmhaTraits<kM0NeedPadding,
@@ -176,13 +172,8 @@ template <ck::index_t HDim,
           typename FmhaMask,
           bool kHasBias,
           bool kStoreLSE>
-using FmhaPipeline =
-#if CK_FMHA_FWD_SUPPORT_HDIM_256
-    ck::tile_program::block::BlockFmhaPipelineQRKSVS
-#else
-    ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync
-#endif
-    <FmhaPipelineProblem<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias, kStoreLSE>>;
+using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync<
+    FmhaPipelineProblem<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias, kStoreLSE>>;
 
 template <typename DataType>
 using FmhaEpilogue =
