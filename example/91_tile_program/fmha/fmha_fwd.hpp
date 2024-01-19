@@ -178,7 +178,7 @@ template <ck::index_t HDim,
           bool kStoreLSE>
 using FmhaPipeline =
 #if CK_FMHA_FWD_SUPPORT_HDIM_256
-    ck::tile_program::block::BlockFmhaPipelineQSKSVS
+    ck::tile_program::block::BlockFmhaPipelineQRKSVS
 #else
     ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync
 #endif
