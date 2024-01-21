@@ -85,10 +85,6 @@ struct FmhaFwdTypeConfig<ck::bf8_t>
     using ODataType           = ck::bf8_t;
 };
 
-// default settings for FmhaFwdKernelSelector<> type alias
-// using VLayout = ck::tensor_layout::gemm::RowMajor; // (bs, nhead) seqlen * hdim
-// using VLayout = ck::tensor_layout::gemm::ColumnMajor; // (bs, nhead) hdim * seqlen
-
 struct FmhaMasks
 {
     using NoMask      = ck::tile_program::block::GenericAttentionMask<false>;
@@ -100,129 +96,6 @@ inline constexpr bool kM0NeedPadding   = false;
 inline constexpr bool kN0K1NeedPadding = false;
 inline constexpr bool kK0N1NeedPadding = false;
 
-#if 0
-template <ck::index_t HDim>
-struct FmhaBlockTile;
-
-template <>
-struct FmhaBlockTile</* HDim = */ 32> : ck::Sequence<128, 64, 16, 32, 32, 32>
-{
-};
-template <>
-struct FmhaBlockTile</* HDim = */ 64> : ck::Sequence<128, 64, 32, 64, 32, 64>
-{
-};
-template <>
-struct FmhaBlockTile</* HDim = */ 128> : ck::Sequence<128, 128, 32, 128, 32, 128>
-{
-};
-template <>
-struct FmhaBlockTile</* HDim = */ 256> : ck::Sequence<128, 128, 32, 256, 32, 256>
-{
-};
-using FmhaBlockWarps = ck::Sequence<4, 1, 1>;
-using FmhaWarpTile   = ck::Sequence<32, 32, 16>;
-
-template <ck::index_t HDim>
-struct FmhaShape;
-
-template <>
-struct FmhaShape</* HDim = */ 32> : ck::tile_program::TileFmhaShape<FmhaBlockTile</* HDim = */ 32>,
-                                                                    ck::Sequence<2, 1, 1>,
-                                                                    FmhaWarpTile,
-                                                                    ck::Sequence<2, 1, 1>,
-                                                                    FmhaWarpTile,
-                                                                    VLayout>
-{
-};
-
-template <>
-struct FmhaShape</* HDim = */ 64> : ck::tile_program::TileFmhaShape<FmhaBlockTile</* HDim = */ 64>,
-                                                                    FmhaBlockWarps,
-                                                                    FmhaWarpTile,
-                                                                    FmhaBlockWarps,
-                                                                    FmhaWarpTile,
-                                                                    VLayout>
-{
-};
-
-template <>
-struct FmhaShape</* HDim = */ 128>
-    : ck::tile_program::TileFmhaShape<FmhaBlockTile</* HDim = */ 128>,
-                                      FmhaBlockWarps,
-                                      FmhaWarpTile,
-                                      FmhaBlockWarps,
-                                      FmhaWarpTile,
-                                      VLayout>
-{
-};
-
-template <>
-struct FmhaShape</* HDim = */ 256>
-    : ck::tile_program::TileFmhaShape<FmhaBlockTile</* HDim = */ 256>,
-                                      FmhaBlockWarps,
-                                      FmhaWarpTile,
-                                      FmhaBlockWarps,
-                                      FmhaWarpTile,
-                                      VLayout>
-{
-};
-
-template <ck::index_t HDim, bool kHasBias, bool kStoreLSE>
-using FmhaTraits = ck::tile_program::TileFmhaTraits<kM0NeedPadding,
-                                                    kN0K1NeedPadding,
-                                                    kK0N1NeedPadding,
-                                                    kHasBias,
-                                                    kStoreLSE,
-                                                    HDim == 64 ? /* occupancy = */ 3 : 2>;
-
-template <ck::index_t HDim,
-          typename DataType,
-          bool kIsGroupMode,
-          typename FmhaMask,
-          bool kHasBias,
-          bool kStoreLSE>
-using FmhaPipelineProblem = ck::tile_program::block::BlockFmhaPipelineProblem<
-    typename FmhaFwdTypeConfig<DataType>::QDataType,
-    typename FmhaFwdTypeConfig<DataType>::KDataType,
-    typename FmhaFwdTypeConfig<DataType>::VDataType,
-    typename FmhaFwdTypeConfig<DataType>::SaccDataType,
-    typename FmhaFwdTypeConfig<DataType>::SMPLComputeDataType,
-    typename FmhaFwdTypeConfig<DataType>::BiasDataType,
-    typename FmhaFwdTypeConfig<DataType>::LSEDataType,
-    typename FmhaFwdTypeConfig<DataType>::PDataType,
-    typename FmhaFwdTypeConfig<DataType>::OaccDataType,
-    typename FmhaFwdTypeConfig<DataType>::ODataType,
-    FmhaShape<HDim>,
-    kIsGroupMode,
-    FmhaMask,
-    FmhaTraits<HDim, kHasBias, kStoreLSE>>;
-
-template <ck::index_t HDim,
-          typename DataType,
-          bool kIsGroupMode,
-          typename FmhaMask,
-          bool kHasBias,
-          bool kStoreLSE>
-using FmhaPipeline = ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync<
-    FmhaPipelineProblem<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias, kStoreLSE>>;
-
-template <typename DataType>
-using FmhaEpilogue =
-    FmhaFwdEpilogue<FmhaFwdEpilogueProblem<typename FmhaFwdTypeConfig<DataType>::OaccDataType,
-                                           typename FmhaFwdTypeConfig<DataType>::ODataType>>;
-
-template <ck::index_t HDim,
-          typename DataType,
-          bool kIsGroupMode,
-          typename FmhaMask,
-          bool kHasBias,
-          bool kStoreLSE>
-using FmhaFwdKernelSelector =
-    FmhaFwdKernel<FmhaFwdTilePartitioner<FmhaShape<HDim>>,
-                  FmhaPipeline<HDim, DataType, kIsGroupMode, FmhaMask, kHasBias, kStoreLSE>,
-                  FmhaEpilogue<DataType>>;
-#endif
 // Kernel API
 template <typename FmhaKernel>
 auto fmha_fwd_create_kargs_and_grids(const void* q_ptr,
@@ -420,21 +293,7 @@ auto fmha_fwd_create_kargs_and_grids(fmha_fwd_args args)
                                                        args.mask_y,
                                                        args.mask_x);
 }
-#if 0
-// will instantiate this function across different source file
-template <typename FmhaKernel>
-float fmha_fwd_run(const StreamConfig&, typename FmhaKernel::Kargs, dim3);
 
-#define FMHA_FWD_KERNEL_DEFINE(KERNEL_)                                                          \
-    template <>                                                                                  \
-    float fmha_fwd_run<KERNEL_>(                                                                 \
-        const StreamConfig& stream, typename KERNEL_::Kargs kargs, dim3 grids)                   \
-    {                                                                                            \
-        constexpr dim3 blocks             = KERNEL_::BlockSize();                                \
-        constexpr ck::index_t kBlockPerCu = KERNEL_::kBlockPerCu;                                \
-        return launch_kernel<blocks.x, kBlockPerCu>(stream, KERNEL_{}, grids, blocks, 0, kargs); \
-    }
-#endif
 template <ck::index_t HDim_,
           typename DataType_,
           bool kIsGroupMode_,
@@ -454,8 +313,4 @@ struct fmha_fwd_traits
 };
 
 template <typename Traits_>
-float fmha_fwd_(const StreamConfig&, fmha_fwd_args)
-{
-    // default behavior: return negative to indicate not implemented
-    return -1;
-}
+float fmha_fwd_(const StreamConfig&, fmha_fwd_args);

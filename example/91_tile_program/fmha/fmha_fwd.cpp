@@ -113,7 +113,7 @@ struct fmha_fwd_kernel_invoker
                               else
                                   return ck::tensor_layout::gemm::ColumnMajor{};
                           }();
-                          using vlayout_t = decltype(v);
+                          using vlayout_t = ck::remove_cvref_t<decltype(v)>;
                           if(mask.type == mask_enum::no_mask)
                           {
                               using mask   = FmhaMasks::NoMask;
@@ -414,13 +414,13 @@ bool run(const ArgParser& arg_parser)
     }
     else
     {
-        std::cerr << "not support hdim, will not run" << std::endl;
+        std::cerr << " not support hdim, will not run" << std::endl;
         return false;
     }
 
     if(ave_time < 0)
     {
-        std::cout << "not supported yet" << std::endl;
+        std::cout << " not supported yet" << std::endl;
         return false;
     }
 

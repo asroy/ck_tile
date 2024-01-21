@@ -5,7 +5,7 @@
 import argparse
 import itertools
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from dataclasses import dataclass
 
 DTYPE_MAP = {
@@ -115,6 +115,78 @@ float fmha_fwd_<trait_{F_idx}>(const StreamConfig& s, fmha_fwd_args a)
 }}
 """
 
+FMHA_FWD_FB_TRAIT = """
+using trait_{F_idx} = fmha_fwd_traits<{F_hdim}, {F_dtype}, {F_mode}, {F_vlayout}, {F_mask}, {F_bias}, {F_lse}>;
+template<> float fmha_fwd_<trait_{F_idx}>(const StreamConfig&, fmha_fwd_args) {{ return -1; }}
+"""
+
+FMHA_FWD_FB_TRAITS_FN='fmha_fwd_fb.cpp'
+
+@dataclass
+class FmhaFwdApiTrait:
+    # sync with fmha_fwd_traits<>, to generate fallback calls
+    hdim      : str
+    dtype     : str  # data type
+    mode      : str  # value from MODE_MAP
+    vlayout   : str
+    mask      : str
+    bias      : str  # true/false
+    lse       : str  #
+
+    @property
+    def name(self) -> str:
+        return f'{self.hdim}-{self.dtype}-{self.mode}-{self.vlayout}-{self.mask}-{self.bias}-{self.lse}'
+
+    def fb_template(self, idx) -> str:
+        return FMHA_FWD_FB_TRAIT.format(
+            F_hdim      = self.hdim,
+            F_dtype     = DTYPE_MAP[self.dtype],
+            F_mode      = MODE_MAP[self.mode],
+            F_vlayout   = LAYOUT_MAP[self.vlayout],
+            F_mask      = MASK_MAP[self.mask],
+            F_bias      = BOOL_MAP[self.bias],
+            F_lse       = BOOL_MAP[self.lse],
+            F_idx       = idx
+        )
+
+class FmhaFwdApiPool:
+    def __init__(self):
+        self.all_hdim = dict()
+        self.all_dtype = dict()
+        self.all_mode = dict()
+        self.all_vlayout = dict()
+        self.all_mask = dict()
+        self.all_bias = dict()
+        self.all_lse = dict()
+
+        self.registed_traits = dict()
+
+    def register_traits(self, trait : FmhaFwdApiTrait):
+        # TODO: do we need to check duplication?
+        self.registed_traits[trait.name] = 1
+
+        self.all_hdim[trait.hdim] = 1
+        self.all_dtype[trait.dtype] = 1
+        self.all_mode[trait.mode] = 1
+        self.all_vlayout[trait.vlayout] = 1
+        self.all_mask[trait.mask] = 1
+        self.all_bias[trait.bias] = 1
+        self.all_lse[trait.lse] = 1
+
+    def get_ungenerated_traits(self):
+        u = list()
+        for hdim, dtype, mode, vlayout, mask, bias, lse in itertools.product(self.all_hdim.keys(), 
+                                                                self.all_dtype.keys(), 
+                                                                self.all_mode.keys(), 
+                                                                self.all_vlayout.keys(), 
+                                                                self.all_mask.keys(), 
+                                                                self.all_bias.keys(), 
+                                                                self.all_lse.keys()):
+            nt = FmhaFwdApiTrait(hdim, dtype, mode, vlayout, mask, bias, lse)
+            if nt.name not in self.registed_traits:
+                u.append(nt)
+        return u
+
 @dataclass
 class FmhaFwdTileSize:
     F_bm0       : int  # tile size along q seqlen (block size)
@@ -193,6 +265,15 @@ class FmhaFwdKernel:
     def filename(self) -> str:
         return self.name + ".cpp"
 
+    def api_trait(self) -> FmhaFwdApiTrait:
+        return FmhaFwdApiTrait(hdim=str(self.F_hdim),
+                dtype=self.F_dtype,
+                mode=self.F_mode,
+                vlayout=self.F_vlayout,
+                mask=self.F_mask,
+                bias=self.F_bias,
+                lse=self.F_lse)
+
 # TODO: design a more practical way to do it
 # this is current supported tile size.
 def get_fmha_fwd_tile_dict_from_dtype(direction : str, dtype : str) -> Optional[dict]:
@@ -213,7 +294,7 @@ def get_fmha_fwd_tile_dict_from_dtype(direction : str, dtype : str) -> Optional[
     else:
         return None
 
-def get_all_kernels() -> List[FmhaFwdKernel]:
+def get_all_kernels() -> Tuple[List, List[FmhaFwdKernel]]:
     # TODO: we don't support tuning yet, so pick up one value for vlayout/pipeline/pad
     #       support this in future
     def get_vlayout(dtype):
@@ -231,7 +312,10 @@ def get_all_kernels() -> List[FmhaFwdKernel]:
         else:
             assert Fasle
     def get_pad():
-        return 't'
+        return 'f'
+
+    gen = list()
+    api_pool = FmhaFwdApiPool()
 
     for direction, dtype in itertools.product(DIRECTIONS, DTYPE_MAP.keys()):
         d = get_fmha_fwd_tile_dict_from_dtype(direction, dtype)
@@ -242,12 +326,26 @@ def get_all_kernels() -> List[FmhaFwdKernel]:
             hdim = int(hdim_str)
             if dtype in ['fp8', 'bf8'] and lse == "t":
                 continue
-            yield FmhaFwdKernel(direction=direction, F_idx=0, F_hdim=hdim, F_dtype=dtype, F_tile=tile, F_vlayout=get_vlayout(dtype),
+            k = FmhaFwdKernel(direction=direction, F_idx=0, F_hdim=hdim, F_dtype=dtype, F_tile=tile, F_vlayout=get_vlayout(dtype),
                                 F_m0pad=get_pad(), F_m0k1pad=get_pad(), F_k0n1pad=get_pad(), F_bias=bias, F_lse=lse,
                                 F_mask=mask, F_mode=mode, F_pipeline=get_pipeline(dtype))
+            api_pool.register_traits(k.api_trait())
+            gen.append(k)
+
+    fbs = api_pool.get_ungenerated_traits()
+
+    return (fbs, gen)
+
 
 def write_single_kernel(kernel: FmhaFwdKernel, autogen_dir: Path) -> None:
     (autogen_dir / kernel.filename).write_text(kernel.template)
+
+def write_fb_kernel(i : int, fb : FmhaFwdApiTrait, autogen_dir: Path) -> None:
+    p = (autogen_dir / FMHA_FWD_FB_TRAITS_FN)
+    with p.open('a') as f:
+        if i == 0:
+            f.write(FMHA_FWD_KERNEL_HEADER)
+        f.write(fb.fb_template(i))
 
 def write_kernels(output_dir: Optional[str]) -> None:
     if output_dir is None:
@@ -256,15 +354,23 @@ def write_kernels(output_dir: Optional[str]) -> None:
         output_dir = Path(output_dir) / GEN_DIR
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    for kernel in get_all_kernels():
+    fbs, kernels = get_all_kernels()
+    for kernel in kernels:
         write_single_kernel(kernel, output_dir)
+
+    for i, fb in enumerate(fbs):
+        write_fb_kernel(i, fb, output_dir)
+
 
 def list_kernels(to_file: Optional[str]) -> None:
     assert to_file is not None
     file_path = Path(to_file)
     with file_path.open('a') as f:
-        for kernel in get_all_kernels():
+        fbs, kernels = get_all_kernels()
+        for kernel in kernels:
             f.write(str(file_path.parent / GEN_DIR / kernel.filename) + "\n")
+        if len(fbs) != 0:
+            f.write(str(file_path.parent / GEN_DIR /FMHA_FWD_FB_TRAITS_FN) + "\n")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
