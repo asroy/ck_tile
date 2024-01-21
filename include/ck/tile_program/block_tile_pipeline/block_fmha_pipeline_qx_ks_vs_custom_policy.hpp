@@ -94,6 +94,17 @@ struct BlockFmhaPipelineQXCustomPolicy</* QLoadOnce = */ true>
             {
                 return warp::WarpGemmMfmaBf16Bf16F32M16N16K32SwizzleBTransposedCDistribution{};
             }
+            else if constexpr(Problem::kIsFp8)
+            {
+                constexpr index_t swizzle_factor = 4; // TODO: hard coded here
+                return warp::WarpGemmImpl<
+                    warp::WarpGemmAtrributeMfmaIterateKAndTransposedCDistribution_SwizzleB<
+                        warp::WarpGemmAttributeMfmaImpl_f32_32x32x16_f8_base<
+                            typename Problem::QDataType,
+                            typename Problem::KDataType>,
+                        2,
+                        swizzle_factor>>{};
+            }
         }();
 
         using BlockGemmPolicy =
@@ -200,6 +211,17 @@ struct BlockFmhaPipelineQXCustomPolicy</* QLoadOnce = */ false>
                               is_same_v<typename Problem::SaccDataType, float>)
             {
                 return warp::WarpGemmMfmaBf16Bf16F32M16N16K32SwizzleBTransposedCDistribution{};
+            }
+            else if constexpr(Problem::kIsFp8)
+            {
+                constexpr index_t swizzle_factor = 4; // TODO: hard coded here
+                return warp::WarpGemmImpl<
+                    warp::WarpGemmAtrributeMfmaIterateKAndTransposedCDistribution_SwizzleB<
+                        warp::WarpGemmAttributeMfmaImpl_f32_32x32x16_f8_base<
+                            typename Problem::QDataType,
+                            typename Problem::KDataType>,
+                        2,
+                        swizzle_factor>>{};
             }
         }();
 
@@ -836,58 +858,6 @@ struct BlockFmhaPipelineQXKSVSCustomPolicy : BlockFmhaPipelineQXCustomPolicy<QLo
                                                Sequence<1, 2>,
                                                Sequence<1, 3>>{});
         }
-    }
-
-    template <typename Problem>
-    __host__ __device__ static constexpr auto GetQKBlockGemm()
-    {
-        using BlockGemmProblem =
-            BlockGemmPipelineProblem<typename Problem::QDataType,
-                                     typename Problem::KDataType,
-                                     typename Problem::SaccDataType,
-                                     Problem::kBlockSize,
-                                     TileGemmShape<Problem::BlockFmhaShape::kM0,
-                                                   Problem::BlockFmhaShape::kN0,
-                                                   Problem::BlockFmhaShape::kK0>>;
-
-        constexpr auto warp_gemm = []() {
-            if constexpr(is_same_v<typename Problem::QDataType, half_t> &&
-                         is_same_v<typename Problem::KDataType, half_t> &&
-                         is_same_v<typename Problem::SaccDataType, float>)
-            {
-                return warp::WarpGemmMfmaF16F16F32M16N16K32SwizzleBTransposedCDistribution{};
-            }
-            else if constexpr(is_same_v<typename Problem::QDataType, bhalf_t> &&
-                              is_same_v<typename Problem::KDataType, bhalf_t> &&
-                              is_same_v<typename Problem::SaccDataType, float>)
-            {
-                return warp::WarpGemmMfmaBf16Bf16F32M16N16K32SwizzleBTransposedCDistribution{};
-            }
-            else if constexpr(Problem::kIsFp8)
-            {
-                constexpr index_t swizzle_factor = 4; // TODO: hard coded here
-                return warp::WarpGemmImpl<
-                    warp::WarpGemmAtrributeMfmaIterateKAndTransposedCDistribution_SwizzleB<
-                        warp::WarpGemmAttributeMfmaImpl_f32_32x32x16_f8_base<
-                            typename Problem::QDataType,
-                            typename Problem::KDataType>,
-                        2,
-                        swizzle_factor>>{};
-                // return
-                // warp::WarpGemmImpl<warp::WarpGemmAtrributeMfmaTransposedCDistribution_SwizzleB<
-                //         warp::WarpGemmAttributeMfmaImpl_f32_32x32x16_f8_base<typename
-                //         Problem::QDataType, typename Problem::KDataType>>>{};
-            }
-        }();
-
-        using BlockGemmPolicy =
-            BlockGemmARegBSmemCRegV2CustomPolicy<typename Problem::QDataType,
-                                                 typename Problem::KDataType,
-                                                 typename Problem::SaccDataType,
-                                                 typename Problem::BlockFmhaShape::Gemm0BlockWarps,
-                                                 decltype(warp_gemm)>;
-
-        return BlockGemmARegBSmemCRegV2<BlockGemmProblem, BlockGemmPolicy>{};
     }
 
     template <typename Problem>
