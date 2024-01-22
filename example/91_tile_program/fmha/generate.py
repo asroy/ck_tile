@@ -7,6 +7,7 @@ import itertools
 from pathlib import Path
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
+import copy
 
 DTYPE_MAP = {
     "fp16": "ck::half_t",
@@ -26,8 +27,8 @@ MODE_MAP = {
 }
 
 LAYOUT_MAP = {
-    "row" : "ck::tensor_layout::gemm::RowMajor",
-    "col" : "ck::tensor_layout::gemm::ColumnMajor"
+    "row" : "true",
+    "col" : "false"
 }
 
 PIPELINE_MAP = {
@@ -102,7 +103,7 @@ using fmha_kernel_{F_idx} =
                   fmha_pipeline_{F_idx},
                   fmha_epilogue_{F_idx}>;
 
-using trait_{F_idx} = fmha_fwd_traits<{F_hdim}, {F_dtype}, {F_mode}, {F_vlayout}, fmha_mask_{F_idx}, {F_bias}, {F_lse}>;
+using trait_{F_idx} = fmha_fwd_traits_<{F_hdim}, {F_dtype}, {F_mode}, {F_vlayout}, fmha_mask_{F_idx}, {F_bias}, {F_lse}>;
 
 template<>
 float fmha_fwd_<trait_{F_idx}>(const StreamConfig& s, fmha_fwd_args a)
@@ -115,12 +116,39 @@ float fmha_fwd_<trait_{F_idx}>(const StreamConfig& s, fmha_fwd_args a)
 }}
 """
 
-FMHA_FWD_FB_TRAIT = """
-using trait_{F_idx} = fmha_fwd_traits<{F_hdim}, {F_dtype}, {F_mode}, {F_vlayout}, {F_mask}, {F_bias}, {F_lse}>;
-template<> float fmha_fwd_<trait_{F_idx}>(const StreamConfig&, fmha_fwd_args) {{ return -1; }}
+FMHA_FWD_API_FILENAME="fmha_fwd_api.cpp"
+FMHA_FWD_API="""
+float fmha_fwd(fmha_fwd_traits t, fmha_fwd_args a, const StreamConfig& s){{
+    float r = -1;
+{F_dispatch}
+    return r;
+}}
 """
 
-FMHA_FWD_FB_TRAITS_FN='fmha_fwd_fb.cpp'
+FMHA_FWD_API_PER_DTYPE="""    {F_if}(t.data_type.compare(\"{F_dtype}\") == 0){{
+        switch (t.hdim){{
+{F_hdim_case}
+            default:
+            break;
+        }}
+    }}
+"""
+FMHA_FWD_API_PER_HDIM_CASE="""            case {F_hdim}: {{
+{F_inner_dispatch}
+            }}
+            break;
+"""
+MASK_CHECK_MAP = {
+    "no" : "t.mask_type == mask_enum::no_mask",
+    "causal" : "t.mask_type == mask_enum::causal_top_left || t.mask_type == mask_enum::causal_bottom_right",
+    "generic" : "t.mask_type == mask_enum::window_generic",
+}
+
+FMHA_FWD_API_INNER_DISPATCH="""                {F_if}((t.is_group_mode == {F_mode}) && (t.is_v_rowmajor == {F_vlayout}) && ({F_mask_check}) && (t.has_bias == {F_bias}) && (t.has_lse == {F_lse})) {{
+                    using trait_ = fmha_fwd_traits_<{F_hdim}, {F_dtype}, {F_mode}, {F_vlayout}, {F_mask}, {F_bias}, {F_lse}>;
+                    return fmha_fwd_<trait_>(s, a);
+                }}
+"""
 
 @dataclass
 class FmhaFwdApiTrait:
@@ -137,55 +165,37 @@ class FmhaFwdApiTrait:
     def name(self) -> str:
         return f'{self.hdim}-{self.dtype}-{self.mode}-{self.vlayout}-{self.mask}-{self.bias}-{self.lse}'
 
-    def fb_template(self, idx) -> str:
-        return FMHA_FWD_FB_TRAIT.format(
-            F_hdim      = self.hdim,
-            F_dtype     = DTYPE_MAP[self.dtype],
-            F_mode      = MODE_MAP[self.mode],
-            F_vlayout   = LAYOUT_MAP[self.vlayout],
-            F_mask      = MASK_MAP[self.mask],
-            F_bias      = BOOL_MAP[self.bias],
-            F_lse       = BOOL_MAP[self.lse],
-            F_idx       = idx
-        )
-
 class FmhaFwdApiPool:
     def __init__(self):
-        self.all_hdim = dict()
-        self.all_dtype = dict()
-        self.all_mode = dict()
-        self.all_vlayout = dict()
-        self.all_mask = dict()
-        self.all_bias = dict()
-        self.all_lse = dict()
+        self.pool = dict()
 
-        self.registed_traits = dict()
-
-    def register_traits(self, trait : FmhaFwdApiTrait):
+    def register_traits(self, trait : FmhaFwdApiTrait) -> None:
         # TODO: do we need to check duplication?
-        self.registed_traits[trait.name] = 1
+        if trait.dtype not in self.pool.keys():
+            self.pool[trait.dtype] = dict()
+        if trait.hdim not in self.pool[trait.dtype].keys():
+            self.pool[trait.dtype][trait.hdim] = list()
 
-        self.all_hdim[trait.hdim] = 1
-        self.all_dtype[trait.dtype] = 1
-        self.all_mode[trait.mode] = 1
-        self.all_vlayout[trait.vlayout] = 1
-        self.all_mask[trait.mask] = 1
-        self.all_bias[trait.bias] = 1
-        self.all_lse[trait.lse] = 1
+        self.pool[trait.dtype][trait.hdim].append(copy.copy(trait))
 
-    def get_ungenerated_traits(self):
-        u = list()
-        for hdim, dtype, mode, vlayout, mask, bias, lse in itertools.product(self.all_hdim.keys(), 
-                                                                self.all_dtype.keys(), 
-                                                                self.all_mode.keys(), 
-                                                                self.all_vlayout.keys(), 
-                                                                self.all_mask.keys(), 
-                                                                self.all_bias.keys(), 
-                                                                self.all_lse.keys()):
-            nt = FmhaFwdApiTrait(hdim, dtype, mode, vlayout, mask, bias, lse)
-            if nt.name not in self.registed_traits:
-                u.append(nt)
-        return u
+    @property
+    def api(self) -> str:
+        per_dtypes=str()
+        for i, dtype in enumerate(self.pool.keys()):
+            per_hdim_case=str()
+            for hdim in self.pool[dtype].keys():
+                traits=self.pool[dtype][hdim]
+                inners=str()
+                for j, trait in enumerate(traits):
+                    if0 = 'if' if j == 0 else 'else if'
+                    inners = inners + FMHA_FWD_API_INNER_DISPATCH.format(F_if=if0, F_mode=MODE_MAP[trait.mode], F_vlayout=LAYOUT_MAP[trait.vlayout], F_mask=MASK_MAP[trait.mask],
+                                   F_mask_check=MASK_CHECK_MAP[trait.mask], F_bias=BOOL_MAP[trait.bias], F_lse=BOOL_MAP[trait.lse], F_hdim=hdim, F_dtype=DTYPE_MAP[dtype])
+            
+                per_hdim_case = per_hdim_case + FMHA_FWD_API_PER_HDIM_CASE.format(F_hdim=hdim, F_inner_dispatch=inners)
+            if1 = 'if' if i == 0 else 'else if'
+            per_dtypes = per_dtypes + FMHA_FWD_API_PER_DTYPE.format(F_if=if1, F_dtype=dtype, F_hdim_case=per_hdim_case)
+
+        return FMHA_FWD_KERNEL_HEADER + FMHA_FWD_API.format(F_dispatch = per_dtypes)
 
 @dataclass
 class FmhaFwdTileSize:
@@ -294,7 +304,7 @@ def get_fmha_fwd_tile_dict_from_dtype(direction : str, dtype : str) -> Optional[
     else:
         return None
 
-def get_all_kernels() -> Tuple[List, List[FmhaFwdKernel]]:
+def get_blobs() -> Tuple[FmhaFwdApiPool, List[FmhaFwdKernel]]:
     # TODO: we don't support tuning yet, so pick up one value for vlayout/pipeline/pad
     #       support this in future
     def get_vlayout(dtype):
@@ -332,66 +342,55 @@ def get_all_kernels() -> Tuple[List, List[FmhaFwdKernel]]:
             api_pool.register_traits(k.api_trait())
             gen.append(k)
 
-    fbs = api_pool.get_ungenerated_traits()
-
-    return (fbs, gen)
-
+    return (api_pool, gen)
 
 def write_single_kernel(kernel: FmhaFwdKernel, autogen_dir: Path) -> None:
     (autogen_dir / kernel.filename).write_text(kernel.template)
 
-def write_fb_kernel(i : int, fb : FmhaFwdApiTrait, autogen_dir: Path) -> None:
-    p = (autogen_dir / FMHA_FWD_FB_TRAITS_FN)
-    with p.open('a') as f:
-        if i == 0:
-            f.write(FMHA_FWD_KERNEL_HEADER)
-        f.write(fb.fb_template(i))
+def write_api(api_pool : FmhaFwdApiPool, autogen_dir: Path) -> None:
+    (autogen_dir / FMHA_FWD_API_FILENAME).write_text(api_pool.api)
 
-def write_kernels(output_dir: Optional[str]) -> None:
+def write_blobs(output_dir: Optional[str]) -> None:
     if output_dir is None:
         output_dir = Path(__file__).parent
     else:
         output_dir = Path(output_dir) / GEN_DIR
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    fbs, kernels = get_all_kernels()
+    api_pool, kernels = get_blobs()
     for kernel in kernels:
         write_single_kernel(kernel, output_dir)
+    write_api(api_pool, output_dir)
 
-    for i, fb in enumerate(fbs):
-        write_fb_kernel(i, fb, output_dir)
-
-
-def list_kernels(to_file: Optional[str]) -> None:
-    assert to_file is not None
-    file_path = Path(to_file)
+# list all the files that will be generated
+def list_blobs(output_file: Optional[str]) -> None:
+    assert output_file is not None
+    file_path = Path(output_file)
     with file_path.open('a') as f:
-        fbs, kernels = get_all_kernels()
+        _, kernels = get_blobs()
         for kernel in kernels:
             f.write(str(file_path.parent / GEN_DIR / kernel.filename) + "\n")
-        if len(fbs) != 0:
-            f.write(str(file_path.parent / GEN_DIR /FMHA_FWD_FB_TRAITS_FN) + "\n")
+        f.write(str(file_path.parent / GEN_DIR / FMHA_FWD_API_FILENAME) + "\n")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog="generate_kernels",
-        description="gen kernels for CK fmha kernel instances",
+        prog="generate",
+        description="gen api for CK fmha kernel",
     )
     parser.add_argument(
         "-o",
         "--output_dir",
         required=False,
-        help="Where to generate the kernels "
-        " will default to the current directory ",
+        help="write all the blobs into a directory"
     )
     parser.add_argument(
         "-l",
-        "--list_kernels",
+        "--list_blobs",
         required=False,
         help="list all the kernels to a file"
     )
     args = parser.parse_args()
-    if args.list_kernels is not None:
-        list_kernels(args.list_kernels)
+    if args.list_blobs is not None:
+        list_blobs(args.list_blobs)
     else:
-        write_kernels(args.output_dir)
+        write_blobs(args.output_dir)
