@@ -35,7 +35,6 @@ PIPELINE_MAP = {
     "qr" : "ck::tile_program::block::BlockFmhaPipelineQRKSVS",
     "qr_fp8" : "ck::tile_program::block::BlockFmhaPipelineQRKSVSFp8",
     "qr_async" : "ck::tile_program::block::BlockFmhaPipelineQRKSVSAsync",
-    "qr_async_fp8" : "ck::tile_program::block::BlockFmhaPipelineQRKSVSAsyncFp8"
 }
 
 BOOL_MAP = {
@@ -293,7 +292,7 @@ def get_fmha_fwd_tile_dict_from_dtype(direction : str, dtype : str) -> Optional[
                 '32'  : FmhaFwdTileSize(128, 64, 16, 32, 32, 32,     2, 1, 1, 32, 32, 16, 2),
                 '64'  : FmhaFwdTileSize(128, 64, 32, 64, 32, 64,     4, 1, 1, 32, 32, 16, 3),
                 '128' : FmhaFwdTileSize(128, 128, 32, 128, 32, 128,  4, 1, 1, 32, 32, 16, 2),
-                '256' : FmhaFwdTileSize(128, 128, 32, 256, 32, 256,  4, 1, 1, 32, 32, 16, 2),
+                '256' : FmhaFwdTileSize(128, 128, 32, 256, 32, 256,  4, 1, 1, 32, 32, 16, 1),
             }
         elif dtype == 'fp8' or dtype == 'bf8':
             return {
@@ -307,21 +306,24 @@ def get_fmha_fwd_tile_dict_from_dtype(direction : str, dtype : str) -> Optional[
 def get_blobs() -> Tuple[FmhaFwdApiPool, List[FmhaFwdKernel]]:
     # TODO: we don't support tuning yet, so pick up one value for vlayout/pipeline/pad
     #       support this in future
-    def get_vlayout(dtype):
+    def get_vlayout(dtype, hdim):
         if dtype in ['fp16', 'bf16']:
             return 'row'
         elif dtype in ['fp8', 'bf8']:
             return 'col'
         else:
             assert Fasle
-    def get_pipeline(dtype):
+    def get_pipeline(dtype, hdim):
         if dtype in ['fp16', 'bf16']:
-            return 'qr_async'
+            if hdim == 256:
+                return 'qr'
+            else:
+                return 'qr_async'
         elif dtype in ['fp8', 'bf8']:
             return 'qr_fp8'
         else:
             assert Fasle
-    def get_pad():
+    def get_pad(dtype, hdim):
         return 'f'
 
     gen = list()
@@ -336,9 +338,9 @@ def get_blobs() -> Tuple[FmhaFwdApiPool, List[FmhaFwdKernel]]:
             hdim = int(hdim_str)
             if dtype in ['fp8', 'bf8'] and lse == "t":
                 continue
-            k = FmhaFwdKernel(direction=direction, F_idx=0, F_hdim=hdim, F_dtype=dtype, F_tile=tile, F_vlayout=get_vlayout(dtype),
-                                F_m0pad=get_pad(), F_m0k1pad=get_pad(), F_k0n1pad=get_pad(), F_bias=bias, F_lse=lse,
-                                F_mask=mask, F_mode=mode, F_pipeline=get_pipeline(dtype))
+            k = FmhaFwdKernel(direction=direction, F_idx=0, F_hdim=hdim, F_dtype=dtype, F_tile=tile, F_vlayout=get_vlayout(dtype, hdim),
+                                F_m0pad=get_pad(dtype, hdim), F_m0k1pad=get_pad(dtype, hdim), F_k0n1pad=get_pad(dtype, hdim),
+                                F_bias=bias, F_lse=lse, F_mask=mask, F_mode=mode, F_pipeline=get_pipeline(dtype, hdim))
             api_pool.register_traits(k.api_trait())
             gen.append(k)
 

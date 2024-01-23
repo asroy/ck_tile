@@ -78,10 +78,12 @@ __device__ void clear_tile(DstrTensors& dstr_tensor)
 template <typename OutDataType, typename InDstrTensors>
 __device__ auto cast_tile_pk_fp8x4(const InDstrTensors& in_dstr_tensors)
 {
+#if defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__)
     // This API is designed to use the _pk_ serious of function
     constexpr auto in_tile_dstr = InDstrTensors::GetTileDistribution();
 
-    constexpr index_t thread_buffer_size    = InDstrTensors::GetThreadBufferSize();
+    constexpr index_t thread_buffer_size = InDstrTensors::GetThreadBufferSize();
+    static_assert(thread_buffer_size % 4 == 0);
     constexpr index_t thread_buffer_size_pk = thread_buffer_size / 4;
 
     auto out_dstr_tensor = make_static_distributed_tensor<OutDataType>(in_tile_dstr);
@@ -113,6 +115,11 @@ __device__ auto cast_tile_pk_fp8x4(const InDstrTensors& in_dstr_tensors)
 #pragma clang diagnostic pop
 
     return out_dstr_tensor;
+#else
+    // fallback
+    return tile_elementwise_in(type_convert<OutDataType, typename InDstrTensors::DataType>,
+                               in_dstr_tensors);
+#endif
 }
 
 template <typename DstType, typename SrcDstrTensors>

@@ -13,7 +13,6 @@
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_fp8.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async.hpp"
-#include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qr_ks_vs_async_fp8.hpp"
 #include "ck/tile_program/block_tile_pipeline/block_fmha_pipeline_qs_ks_vs.hpp"
 #include "ck/tile_program/tile/tile_fmha_shape.hpp"
 #include "ck/tile_program/tile/tile_fmha_traits.hpp"
