@@ -127,10 +127,8 @@ bool run(const ArgParser& arg_parser)
     if(hdim_v == 0)
         hdim_v = hdim_q;
 
-    bool i_perm = static_cast<bool>(
-        arg_parser.get_int("iperm")); // if true, will be batch * nhead * seqlen * hdim
-    bool o_perm = static_cast<bool>(
-        arg_parser.get_int("operm")); // if false, will be batch * seqlen * nhead * hdim
+    bool i_perm = arg_parser.get_bool("iperm"); // if true, will be batch * nhead * seqlen * hdim
+    bool o_perm = arg_parser.get_bool("operm"); // if false, will be batch * seqlen * nhead * hdim
 
     float scale = arg_parser.get_float("scale");
     if(scale == .0f)
