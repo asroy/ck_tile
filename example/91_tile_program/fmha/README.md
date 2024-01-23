@@ -4,7 +4,7 @@ This folder contains example for fmha(fused multi-head attention) using ck tile-
 
 ## build
 ```
-# in root of ck
+# in the root of ck
 mkdir build && cd build
 sh ../script/cmake-ck-dev.sh  ../ <arch>  # you can replace this <arch> to gfx90a, gfx942...
 make example_fmha_fwd -j
@@ -13,7 +13,11 @@ This will result in an executable `build/bin/example_fmha_fwd`
 
 ## kernel
 The kernel template is `fmha_fwd_kernel.hpp`, this is the gridwise op in old ck's terminology. We put it here purposely, to demostrate one can construct a kernel by using various internal component from ck. We may still have an implementation under ck's include path (in the future) for the kernel template.
-There are 3 template parameter for this kernel template. FIrst, `TilePartitioner_` is used to map the workgroup to corresponding tile, `fmha_fwd_tile_partitioner.hpp` in this folder served as this purpose. Second, `FmhaPipeline_` is one of the block_tile_pipeline(under `include/ck/tile_program/block_tile_pipeline`) which is a performance critical component. Indeed we did a lot of optimization and trials to optimize the pipeline, and may still workout more performance pipeline and update into that folder. People only need to replace this pipeline type and would be able to enjoy the benifit of different performant implementations (stay tuned for updated pipeline(s)). Third,`EpiloguePipeline_` will modify and store out the result in the last phase. People usually will do lot of post-fusion at this stage, so we also abstract this concept. Currently we didn't do much thing at the epilogue stage, but leave the room for furture possible support.
+
+There are 3 template parameters for this kernel template.
+* `TilePartitioner` is used to map the workgroup to corresponding tile, `fmha_fwd_tile_partitioner.hpp` in this folder served as this purpose.
+* `FmhaPipeline` is one of the block_tile_pipeline(under `include/ck/tile_program/block_tile_pipeline`) which is a performance critical component. Indeed we did a lot of optimization and trials to optimize the pipeline, and may still workout more performance pipeline and update into that folder. People only need to replace this pipeline type and would be able to enjoy the benifit of different performant implementations (stay tuned for updated pipeline(s)).
+* `EpiloguePipeline` will modify and store out the result in the last phase. People usually will do lot of post-fusion at this stage, so we also abstract this concept. Currently we didn't do much thing at the epilogue stage, but leave the room for furture possible support.
 
 ## codegen
 To speed up compile time, we instantiate the kernels into seperate file. In this way we can benifit from parallel building from cmake/make system. This is achieved by `generate.py` script. Beside, you can look into this script to learn how to instantiate a kernel instance step by step, which is described in `FMHA_FWD_KERNEL_BODY` variable.
@@ -48,8 +52,8 @@ args:
 ```
 Example: `./bin/example_fmha_fwd -b=1 -h=16 -s=16384 -d=128` will run a fmha case with batch=1, nhead=16, sequence length=16384, hdim=128, fp16 case.
 
-## support metrics
-Currently we are still in rapid development stage, so lot of features will be added soon.
+## support features
+Currently we are still in rapid development stage, so more features/optimizations will comming soon.
 
 ### hdim
 Currently we support `32/64/128/256` hdim for `fp16`/`bf16`, within which `64`/`128` is better optimized. We may consider optimize other hdim performance if have more request. We also have an experimental support for arbitrary hdim(even odd number), one can change the return value of `get_pad()` inside `generate.py` to achieve this. (Note: we may change the method or optimize arbitraty hdim support in the future)
@@ -75,6 +79,7 @@ We support v matrix in both row-major(`seqlen*hdim`) and col-major(`hdim*seqlen`
 ### generic attention mask coordinate
 We unify the mask expression into generic attention mask coordinate, providing an uniformed approach to describe causal top-left, causal bottom-right, local attention.
 ![](misc/gamc.png)
+
 (more description to be added)
 
 ### dropout
