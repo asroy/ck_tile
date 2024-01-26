@@ -325,11 +325,15 @@ struct BlockFmhaPipelineQRKSVS
             auto p_compute = make_static_distributed_tensor<SMPLComputeDataType>(
                 s.GetTileDistribution()); // Pcompute{j}
 
+            static const auto get_validated_m = [](SMPLComputeDataType raw_m) {
+                return raw_m == NumericLimits<SMPLComputeDataType>::Lowest() ? 0.0f : raw_m;
+            };
+
             constexpr auto p_spans = decltype(p_compute)::GetDistributedSpans();
             sweep_tile_span(p_spans[Number<0>{}], [&](auto idx0) {
                 constexpr auto i_idx = make_tuple(idx0);
 #if CK_FMHA_FWD_FAST_EXP2
-                auto row_max = scale * m[i_idx];
+                auto row_max = scale * get_validated_m(m[i_idx]);
 #endif
                 sweep_tile_span(p_spans[Number<1>{}], [&](auto idx1) {
                     constexpr auto i_j_idx = make_tuple(idx0, idx1);
@@ -340,10 +344,10 @@ struct BlockFmhaPipelineQRKSVS
                     }
                     else
                     {
-                        p_compute(i_j_idx) = math::exp2(s[i_j_idx] - m[i_idx]);
+                        p_compute(i_j_idx) = math::exp2(s[i_j_idx] - get_validated_m(m[i_idx]));
                     }
 #else
-                    p_compute(i_j_idx)     = math::exp(s[i_j_idx] - m[i_idx]);
+                    p_compute(i_j_idx)     = math::exp(s[i_j_idx] - get_validated_m(m[i_idx]));
 #endif
                 });
             });
@@ -360,16 +364,16 @@ struct BlockFmhaPipelineQRKSVS
                 const auto tmp = [&]() {
                     if constexpr(is_null_tile_window(bias_dram_window))
                     {
-                        auto row_max = scale * m[i_idx];
+                        auto row_max = scale * get_validated_m(m[i_idx]);
                         return math::exp2(scale * m_old[i_idx] - row_max);
                     }
                     else
                     {
-                        return math::exp2(m_old[i_idx] - m[i_idx]);
+                        return math::exp2(m_old[i_idx] - get_validated_m(m[i_idx]));
                     }
                 }();
 #else
-                const auto tmp       = math::exp(m_old[i_idx] - m[i_idx]);
+                const auto tmp       = math::exp(m_old[i_idx] - get_validated_m(m[i_idx]));
 #endif
                 l(i_idx) = tmp * l[i_idx] + rowsum_p[i_idx];
                 sweep_tile_span(o_spans[Number<1>{}], [&](auto idx1) {
