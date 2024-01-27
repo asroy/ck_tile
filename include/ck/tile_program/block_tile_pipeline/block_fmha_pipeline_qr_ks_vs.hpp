@@ -155,7 +155,7 @@ struct BlockFmhaPipelineQRKSVS
         auto l     = MLBlockTileType{};
 
         clear_tile(o_acc);
-        set_tile(m, NumericLimits<SMPLComputeDataType>::Lowest());
+        set_tile(m, -NumericLimits<SMPLComputeDataType>::Infinity());
         clear_tile(l);
 
         const auto q_origin = q_dram_window.GetWindowOrigin();
@@ -315,7 +315,7 @@ struct BlockFmhaPipelineQRKSVS
                 s,
                 Sequence<1>{},
                 f_max,
-                NumericLimits<SMPLComputeDataType>::Lowest()); // m_local = rowmax(S{j})
+                -NumericLimits<SMPLComputeDataType>::Infinity()); // m_local = rowmax(S{j})
             block_tile_reduce_sync(m_local, f_max, bool_constant<false>{});
 
             const auto m_old = m; // m{j-1}
@@ -326,7 +326,7 @@ struct BlockFmhaPipelineQRKSVS
                 s.GetTileDistribution()); // Pcompute{j}
 
             static const auto get_validated_m = [](SMPLComputeDataType raw_m) {
-                return raw_m == NumericLimits<SMPLComputeDataType>::Lowest()
+                return raw_m == -NumericLimits<SMPLComputeDataType>::Infinity()
                            ? type_convert<SMPLComputeDataType>(0.0f)
                            : raw_m;
             };
