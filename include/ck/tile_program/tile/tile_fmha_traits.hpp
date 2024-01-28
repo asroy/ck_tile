@@ -10,7 +10,8 @@ namespace tile_program {
 
 template <bool kPadSeqLenQ_ /* padding for seqlen_q */,
           bool kPadSeqLenK_ /* padding for seqlen_k */,
-          bool kPadHeadDimQV_ /* paddding for hdim_q / hdim_v */,
+          bool kPadHeadDimQ_ /* paddding for hdim_q */,
+          bool kPadHeadDimV_ /* paddding for hdim_v */,
           bool kHasBias_,
           bool kStoreLSE_,
           index_t kBlockPerCu_ = 2 /* hint to occupancy */>
@@ -18,7 +19,8 @@ struct TileFmhaTraits
 {
     static constexpr bool kPadSeqLenQ    = kPadSeqLenQ_;
     static constexpr bool kPadSeqLenK    = kPadSeqLenK_;
-    static constexpr bool kPadHeadDimQV  = kPadHeadDimQV_;
+    static constexpr bool kPadHeadDimQ   = kPadHeadDimQ_;
+    static constexpr bool kPadHeadDimV   = kPadHeadDimV_;
     static constexpr bool kHasBias       = kHasBias_;
     static constexpr bool kStoreLSE      = kStoreLSE_;
     static constexpr index_t kBlockPerCu = kBlockPerCu_;

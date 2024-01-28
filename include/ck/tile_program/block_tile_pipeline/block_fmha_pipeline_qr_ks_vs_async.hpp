@@ -55,12 +55,13 @@ struct BlockFmhaPipelineQRKSVSAsync
     static constexpr index_t kK1            = BlockFmhaShape::kK1;
     static constexpr index_t kK0BlockLength = BlockFmhaShape::kK0BlockLength;
 
-    static constexpr bool kIsGroupMode  = Problem::kIsGroupMode;
-    static constexpr bool kPadSeqLenQ   = Problem::kPadSeqLenQ;
-    static constexpr bool kPadSeqLenK   = Problem::kPadSeqLenK;
-    static constexpr bool kPadHeadDimQV = Problem::kPadHeadDimQV;
-    static constexpr bool kHasBias      = Problem::kHasBias;
-    static constexpr bool kStoreLSE     = Problem::kStoreLSE;
+    static constexpr bool kIsGroupMode = Problem::kIsGroupMode;
+    static constexpr bool kPadSeqLenQ  = Problem::kPadSeqLenQ;
+    static constexpr bool kPadSeqLenK  = Problem::kPadSeqLenK;
+    static constexpr bool kPadHeadDimQ = Problem::kPadHeadDimQ;
+    static constexpr bool kPadHeadDimV = Problem::kPadHeadDimV;
+    static constexpr bool kHasBias     = Problem::kHasBias;
+    static constexpr bool kStoreLSE    = Problem::kStoreLSE;
 
 #if CK_FMHA_FWD_FAST_EXP2
     static constexpr auto R_LOG2E = 1.0 / math::log2e_v<SaccDataType>;
