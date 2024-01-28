@@ -395,9 +395,16 @@ struct BlockFmhaPipelineQRKSVSAsync
             __builtin_amdgcn_sched_barrier(0);
 
             static const auto get_validated_m = [](SMPLComputeDataType raw_m) {
-                return raw_m == -NumericLimits<SMPLComputeDataType>::Infinity()
-                           ? type_convert<SMPLComputeDataType>(0.0f)
-                           : raw_m;
+                if constexpr(FmhaMask::IsMasking)
+                {
+                    return raw_m == -NumericLimits<SMPLComputeDataType>::Infinity()
+                               ? type_convert<SMPLComputeDataType>(0.f)
+                               : raw_m;
+                }
+                else
+                {
+                    return raw_m;
+                }
             };
 
             constexpr auto p_spans = decltype(p_compute)::GetDistributedSpans();
