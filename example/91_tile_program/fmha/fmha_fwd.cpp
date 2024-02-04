@@ -49,7 +49,7 @@ auto create_args(int argc, char* argv[])
         .insert("s_k", "0", "seqlen_k, 0 means equal to s")
         .insert("d", "128", "head dim for q, k")
         .insert("d_v", "0", "head dim for v, 0 means equal to d")
-        .insert("scale", "0", "scale factor. 0 means equal to 1/sqrt(seqlen)")
+        .insert("scale", "0", "scale factor. 0 means equal to 1/sqrt(hdim)")
         .insert("descale_q", "1", "scale factor for fp8 quantization")
         .insert("descale_k", "1", "scale factor for fp8 quantization")
         .insert("descale_v", "1", "scale factor for fp8 quantization")
@@ -68,6 +68,7 @@ auto create_args(int argc, char* argv[])
                 "'g:y,x', generic attention mask coordinate with y/x size\n")
         .insert("vlayout", "r", "r for row-major(seqlen*hdim), c for col-major(hdim*seqlen)")
         .insert("lse", "0", "0 not store lse, 1 store lse")
+        .insert("kname", "0", "if set to 1 will print kernel name")
         .insert("init", "1", "init method. 0:random int, 1:random float, 2:trig float")
         .insert("seed",
                 "11939",
@@ -157,8 +158,9 @@ bool run(const ArgParser& arg_parser)
 
     int stream_warmup = env_get_int("CK_WARMUP", 5);
     int stream_repeat = env_get_int("CK_REPEAT", 20);
+    bool kname        = arg_parser.get_bool("kname");
 
-    StreamConfig stream_config{nullptr, true, 0, stream_warmup, stream_repeat};
+    StreamConfig stream_config{nullptr, true, kname ? 1 : 0, stream_warmup, stream_repeat};
 
     const auto seqstart_q_host = generate_seqstarts(mode, batch, seqlen_q);
     const auto seqstart_k_host = generate_seqstarts(mode, batch, seqlen_k);
@@ -295,9 +297,15 @@ bool run(const ArgParser& arg_parser)
               << ", d:" << hdim_q << "/" << hdim_v << ", scale:" << scale << ", bias:" << use_bias
               << ", lse:" << lse << ", mask:" << mask << ", v:" << vlayout << std::flush;
 
-    auto fmha_traits = fmha_fwd_traits{
-        hdim_q, data_type, mode == mode_enum::group, is_v_rowmajor, mask.type, use_bias, lse};
-    auto fmha_args = fmha_fwd_args{q_buf.GetDeviceBuffer(),
+    auto fmha_traits = fmha_fwd_traits{hdim_q,
+                                       hdim_v,
+                                       data_type,
+                                       mode == mode_enum::group,
+                                       is_v_rowmajor,
+                                       mask.type,
+                                       use_bias,
+                                       lse};
+    auto fmha_args   = fmha_fwd_args{q_buf.GetDeviceBuffer(),
                                    k_buf.GetDeviceBuffer(),
                                    v_buf.GetDeviceBuffer(),
                                    bias_buf.GetDeviceBuffer(),
@@ -461,11 +469,11 @@ bool run(const ArgParser& arg_parser)
 
         auto [rtol, atol] = get_elimit<DataType>(init_method);
         bool cur_pass     = ck::utils::check_err(
-            o_host_result, o_host_ref, std::string("O Error: Incorrect results!"), rtol, atol);
+            o_host_result, o_host_ref, std::string("OUT Error: Incorrect results!"), rtol, atol);
         pass &= cur_pass;
         if(!cur_pass)
         {
-            std::cerr << "O mismatch found at batch: " << wb << std::endl
+            std::cerr << "OUT mismatch found at batch: " << wb << std::endl
                       << "\tseqlen_q: " << real_seqlen_q << std::endl
                       << "\tseqlen_k: " << real_seqlen_k << std::endl
                       << "\tseqstart_q: " << seqstart_q_host << std::endl

@@ -155,7 +155,371 @@ struct buffer_load<1>
     }
 };
 
+template <index_t bytes>
+struct buffer_load_if;
+
+template <>
+struct buffer_load_if<16>
+{
+    template <typename T>
+    __device__ void operator()(T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t flag = 0)
+    {
+        static_assert(sizeof(T) == 16);
+        auto saved_exec = __builtin_amdgcn_read_exec();
+        asm volatile(
+            "v_cmpx_le_u32 exec, 1, %5\n"
+            "buffer_load_dwordx4 %0, %1, %2, %3 offen offset:%4\n"
+            "s_mov_b64 exec %6"
+            : "+v"(value)
+            : "v"(v_offset), "s"(res), "s"(s_offset), "n"(i_offset), "v"(flag), "s"(saved_exec)
+            : "memory");
+    }
+};
+
+template <>
+struct buffer_load_if<8>
+{
+    template <typename T>
+    __device__ void operator()(T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t flag = 0)
+    {
+        static_assert(sizeof(T) == 8);
+        auto saved_exec = __builtin_amdgcn_read_exec();
+        asm volatile(
+            "v_cmpx_le_u32 exec, 1, %5\n"
+            "buffer_load_dwordx2 %0, %1, %2, %3 offen offset:%4\n"
+            "s_mov_b64 exec %6"
+            : "+v"(value)
+            : "v"(v_offset), "s"(res), "s"(s_offset), "n"(i_offset), "v"(flag), "s"(saved_exec)
+            : "memory");
+    }
+};
+
+template <>
+struct buffer_load_if<4>
+{
+    template <typename T>
+    __device__ void operator()(T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t flag = 0)
+    {
+        static_assert(sizeof(T) == 4);
+        auto saved_exec = __builtin_amdgcn_read_exec();
+        asm volatile(
+            "v_cmpx_le_u32 exec, 1, %5\n"
+            "buffer_load_dword %0, %1, %2, %3 offen offset:%4\n"
+            "s_mov_b64 exec %6"
+            : "+v"(value)
+            : "v"(v_offset), "s"(res), "s"(s_offset), "n"(i_offset), "v"(flag), "s"(saved_exec)
+            : "memory");
+    }
+};
+
+template <>
+struct buffer_load_if<2>
+{
+    template <typename T>
+    __device__ void operator()(T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t flag = 0)
+    {
+        static_assert(sizeof(T) == 2);
+        auto saved_exec = __builtin_amdgcn_read_exec();
+        asm volatile(
+            "v_cmpx_le_u32 exec, 1, %5\n"
+            "buffer_load_ushort %0, %1, %2, %3 offen offset:%4\n"
+            "s_mov_b64 exec %6"
+            : "+v"(value)
+            : "v"(v_offset), "s"(res), "s"(s_offset), "n"(i_offset), "v"(flag), "s"(saved_exec)
+            : "memory");
+    }
+};
+
+template <>
+struct buffer_load_if<1>
+{
+    template <typename T>
+    __device__ void operator()(T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t flag = 0)
+    {
+        static_assert(sizeof(T) == 1);
+        auto saved_exec = __builtin_amdgcn_read_exec();
+        asm volatile(
+            "v_cmpx_le_u32 exec, 1, %5\n"
+            "buffer_load_ubyte %0, %1, %2, %3 offen offset:%4\n"
+            "s_mov_b64 exec %6"
+            : "+v"(value)
+            : "v"(v_offset), "s"(res), "s"(s_offset), "n"(i_offset), "v"(flag), "s"(saved_exec)
+            : "memory");
+    }
+};
+
+template <index_t bytes>
+struct buffer_store;
+
+template <>
+struct buffer_store<16>
+{
+    template <typename T>
+    __device__ void operator()(const T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t /*flag*/ = 1)
+    {
+        static_assert(sizeof(T) == 16);
+        asm volatile("buffer_store_dwordx4 %0, %1, %2, %3 offen offset:%4"
+                     :
+                     : "v"(value), "v"(v_offset), "s"(res), "s"(s_offset), "n"(i_offset)
+                     : "memory");
+    }
+};
+
+template <>
+struct buffer_store<8>
+{
+    template <typename T>
+    __device__ void operator()(const T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t /*flag*/ = 1)
+    {
+        static_assert(sizeof(T) == 8);
+        asm volatile("buffer_store_dwordx2 %0, %1, %2, %3 offen offset:%4"
+                     :
+                     : "v"(value), "v"(v_offset), "s"(res), "s"(s_offset), "n"(i_offset)
+                     : "memory");
+    }
+};
+
+template <>
+struct buffer_store<4>
+{
+    template <typename T>
+    __device__ void operator()(const T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t /*flag*/ = 1)
+    {
+        static_assert(sizeof(T) == 4);
+        asm volatile("buffer_store_dword %0, %1, %2, %3 offen offset:%4"
+                     :
+                     : "v"(value), "v"(v_offset), "s"(res), "s"(s_offset), "n"(i_offset)
+                     : "memory");
+    }
+};
+
+template <>
+struct buffer_store<2>
+{
+    template <typename T>
+    __device__ void operator()(const T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t /*flag*/ = 1)
+    {
+        static_assert(sizeof(T) == 2);
+        asm volatile("buffer_store_short %0, %1, %2, %3 offen offset:%4"
+                     :
+                     : "v"(value), "v"(v_offset), "s"(res), "s"(s_offset), "n"(i_offset)
+                     : "memory");
+    }
+};
+
+template <>
+struct buffer_store<1>
+{
+    template <typename T>
+    __device__ void operator()(const T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t /*flag*/ = 1)
+    {
+        static_assert(sizeof(T) == 1);
+        asm volatile("buffer_store_byte %0, %1, %2, %3 offen offset:%4"
+                     :
+                     : "v"(value), "v"(v_offset), "s"(res), "s"(s_offset), "n"(i_offset)
+                     : "memory");
+    }
+};
+
+template <index_t bytes>
+struct buffer_store_if;
+
+template <>
+struct buffer_store_if<16>
+{
+    template <typename T>
+    __device__ void operator()(const T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t flag = 1)
+    {
+        static_assert(sizeof(T) == 16);
+        auto save_exec = __builtin_amdgcn_read_exec();
+        asm volatile("v_cmpx_le_u32 exec, 1, %5\n"
+                     "buffer_store_dwordx4 %0, %1, %2, %3 offen offset:%4\n"
+                     "s_mov_b64 exec %6"
+                     :
+                     : "v"(value),
+                       "v"(v_offset),
+                       "s"(res),
+                       "s"(s_offset),
+                       "n"(i_offset),
+                       "v"(flag),
+                       "s"(save_exec)
+                     : "memory");
+    }
+};
+
+template <>
+struct buffer_store_if<8>
+{
+    template <typename T>
+    __device__ void operator()(const T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t flag = 1)
+    {
+        static_assert(sizeof(T) == 8);
+        auto save_exec = __builtin_amdgcn_read_exec();
+        asm volatile("v_cmpx_le_u32 exec, 1, %5\n"
+                     "buffer_store_dwordx2 %0, %1, %2, %3 offen offset:%4\n"
+                     "s_mov_b64 exec %6"
+                     :
+                     : "v"(value),
+                       "v"(v_offset),
+                       "s"(res),
+                       "s"(s_offset),
+                       "n"(i_offset),
+                       "v"(flag),
+                       "s"(save_exec)
+                     : "memory");
+    }
+};
+
+template <>
+struct buffer_store_if<4>
+{
+    template <typename T>
+    __device__ void operator()(const T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t flag = 1)
+    {
+        static_assert(sizeof(T) == 4);
+        auto save_exec = __builtin_amdgcn_read_exec();
+        asm volatile("v_cmpx_le_u32 exec, 1, %5\n"
+                     "buffer_store_dword %0, %1, %2, %3 offen offset:%4\n"
+                     "s_mov_b64 exec %6"
+                     :
+                     : "v"(value),
+                       "v"(v_offset),
+                       "s"(res),
+                       "s"(s_offset),
+                       "n"(i_offset),
+                       "v"(flag),
+                       "s"(save_exec)
+                     : "memory");
+    }
+};
+
+template <>
+struct buffer_store_if<2>
+{
+    template <typename T>
+    __device__ void operator()(const T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t flag = 1)
+    {
+        static_assert(sizeof(T) == 2);
+        auto save_exec = __builtin_amdgcn_read_exec();
+        asm volatile("v_cmpx_le_u32 exec, 1, %5\n"
+                     "buffer_store_short %0, %1, %2, %3 offen offset:%4\n"
+                     "s_mov_b64 exec %6"
+                     :
+                     : "v"(value),
+                       "v"(v_offset),
+                       "s"(res),
+                       "s"(s_offset),
+                       "n"(i_offset),
+                       "v"(flag),
+                       "s"(save_exec)
+                     : "memory");
+    }
+};
+
+template <>
+struct buffer_store_if<1>
+{
+    template <typename T>
+    __device__ void operator()(const T& value,
+                               int32x4_t res /*buffer resource*/,
+                               index_t v_offset,
+                               index_t s_offset,
+                               index_t i_offset /*max 0xFFF*/,
+                               index_t flag = 1)
+    {
+        static_assert(sizeof(T) == 1);
+        auto save_exec = __builtin_amdgcn_read_exec();
+        asm volatile("v_cmpx_le_u32 exec, 1, %5\n"
+                     "buffer_store_byte %0, %1, %2, %3 offen offset:%4\n"
+                     "s_mov_b64 exec %6"
+                     :
+                     : "v"(value),
+                       "v"(v_offset),
+                       "s"(res),
+                       "s"(s_offset),
+                       "n"(i_offset),
+                       "v"(flag),
+                       "s"(save_exec)
+                     : "memory");
+    }
+};
+
 __device__ void buffer_load_fence(index_t cnt = 0)
+{
+    asm volatile("s_waitcnt vmcnt(%0)" : : "n"(cnt) : "memory");
+}
+
+__device__ void buffer_store_fence(index_t cnt = 0)
 {
     asm volatile("s_waitcnt vmcnt(%0)" : : "n"(cnt) : "memory");
 }
@@ -537,8 +901,7 @@ amd_buffer_load_impl_raw(int32x4_t src_wave_buffer_resource,
 
 template <typename T,
           index_t N,
-          AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence,
-          bool use_inline_asm              = false>
+          AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence>
 __device__ typename vector_type<T, N>::type amd_buffer_load_impl(int32x4_t src_wave_buffer_resource,
                                                                  index_t src_thread_addr_offset,
                                                                  index_t src_wave_addr_offset)
@@ -554,15 +917,7 @@ __device__ typename vector_type<T, N>::type amd_buffer_load_impl(int32x4_t src_w
             (is_same<T, int8_t>::value && (N == 1 || N == 2 || N == 4 || N == 8 || N == 16)),
         "wrong! not implemented");
 
-    if constexpr(use_inline_asm)
-    {
-        using type = typename vector_type<T, N>::type;
-        type tmp;
-        buffer_load<sizeof(type)>{}(
-            tmp, src_wave_buffer_resource, src_thread_addr_offset, src_wave_addr_offset, 0);
-        return tmp;
-    }
-    else if constexpr(is_same<T, float>::value) // fp32
+    if constexpr(is_same<T, float>::value) // fp32
     {
         if constexpr(N == 1)
         {
@@ -714,30 +1069,29 @@ __device__ typename vector_type<T, N>::type amd_buffer_load_impl(int32x4_t src_w
 
 template <typename T,
           index_t N,
-          AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence>
+          AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence,
+          bool oob_conditional_check       = true>
 __device__ void amd_buffer_load_raw_impl(typename vector_type<T, N>::type& dst,
                                          int32x4_t src_wave_buffer_resource,
                                          index_t src_thread_addr_offset,
-                                         index_t src_wave_addr_offset)
+                                         index_t src_wave_addr_offset,
+                                         index_t flag = 0)
 {
-    static_assert(
-        (is_same<T, double>::value && (N == 1 || N == 2 || N == 4)) ||
-            (is_same<T, float>::value && (N == 1 || N == 2 || N == 4 || N == 8)) ||
-            (is_same<T, half_t>::value && (N == 1 || N == 2 || N == 4 || N == 8)) ||
-            (is_same<T, bhalf_t>::value && (N == 1 || N == 2 || N == 4 || N == 8)) ||
-            (is_same<T, int32_t>::value && (N == 1 || N == 2 || N == 4 || N == 8)) ||
-            (is_same<T, int8_t>::value && (N == 1 || N == 2 || N == 4 || N == 8 || N == 16)),
-        "wrong! not implemented");
-#if BUFFER_LOAD_USE_INLINEASM
+    constexpr index_t bytes = sizeof(T) * N;
+    static_assert(bytes == 1 || bytes == 2 || bytes == 4 || bytes == 8 || bytes == 16,
+                  "wrong! not supported by buffer_load instruction");
+
     using type = typename vector_type<T, N>::type;
-    buffer_load<sizeof(type)>{}(
-        dst, src_wave_buffer_resource, src_thread_addr_offset, src_wave_addr_offset, 0);
-#else
-    (void)dst;
-    (void)src_wave_buffer_resource;
-    (void)src_thread_addr_offset;
-    (void)src_wave_addr_offset;
-#endif
+    if constexpr(oob_conditional_check)
+    {
+        buffer_load_if<sizeof(type)>{}(
+            dst, src_wave_buffer_resource, src_thread_addr_offset, src_wave_addr_offset, 0, flag);
+    }
+    else
+    {
+        buffer_load<sizeof(type)>{}(
+            dst, src_wave_buffer_resource, src_thread_addr_offset, src_wave_addr_offset, 0, flag);
+    }
 }
 
 template <typename T,
@@ -1020,6 +1374,40 @@ __device__ void amd_buffer_store_impl(const typename vector_type<T, N>::type src
     }
 }
 
+template <typename T,
+          index_t N,
+          AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence,
+          bool oob_conditional_check       = true>
+__device__ void amd_buffer_store_raw_impl(const typename vector_type<T, N>::type dst_thread_data,
+                                          int32x4_t dst_wave_buffer_resource,
+                                          index_t dst_thread_addr_offset,
+                                          index_t dst_wave_addr_offset,
+                                          index_t is_valid_element = 1)
+{
+    constexpr index_t bytes = sizeof(T) * N;
+    static_assert(bytes == 1 || bytes == 2 || bytes == 4 || bytes == 8 || bytes == 16,
+                  "wrong! not supported by buffer_store instruction");
+
+    using type = typename vector_type<T, N>::type;
+    if constexpr(oob_conditional_check)
+    {
+        buffer_store_if<sizeof(type)>{}(dst_thread_data,
+                                        dst_wave_buffer_resource,
+                                        dst_thread_addr_offset,
+                                        dst_wave_addr_offset,
+                                        0,
+                                        is_valid_element);
+    }
+    else
+    {
+        buffer_store<sizeof(type)>{}(dst_thread_data,
+                                     dst_wave_buffer_resource,
+                                     dst_thread_addr_offset,
+                                     dst_wave_addr_offset,
+                                     0);
+    }
+}
+
 template <typename T, index_t N>
 __device__ void amd_buffer_atomic_add_impl(const typename vector_type<T, N>::type src_thread_data,
                                            int32x4_t dst_wave_buffer_resource,
@@ -1247,10 +1635,11 @@ __device__ void amd_buffer_atomic_max_impl(const typename vector_type<T, N>::typ
 //   1) p_src_wave must point to global memory space
 //   2) p_src_wave must be a wavewise pointer.
 // It is user's responsibility to make sure that is true.
+//   oob_conditional_check : dynamic check if out-of-bound
 template <typename T,
           index_t N,
           AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence,
-          bool use_inline_asm              = false>
+          bool oob_conditional_check       = true>
 __device__ typename vector_type_maker<T, N>::type::type
 amd_buffer_load_invalid_element_return_zero(const T* p_src_wave,
                                             index_t src_thread_element_offset,
@@ -1268,15 +1657,21 @@ amd_buffer_load_invalid_element_return_zero(const T* p_src_wave,
     constexpr index_t vector_size = scalar_type<vector_t>::vector_size;
 
 #if CK_EXPERIMENTAL_USE_BUFFER_LOAD_OOB_CHECK_OFFSET_TRICK
-    uint32_t src_addr_shift = src_thread_element_valid ? 0 : 0x80000000;
-    return amd_buffer_load_impl<scalar_t, vector_size, coherence, use_inline_asm>(
+    uint32_t src_addr_shift = [&]() {
+        if constexpr(oob_conditional_check)
+            return src_thread_element_valid ? 0 : 0x80000000;
+        else
+            return 0;
+    }();
+    return amd_buffer_load_impl<scalar_t, vector_size, coherence>(
         src_wave_buffer_resource, src_addr_shift + src_thread_addr_offset, 0);
-
 #else
-
-    vector_t tmp = amd_buffer_load_impl<scalar_t, vector_size, coherence, use_inline_asm>(
+    vector_t tmp = amd_buffer_load_impl<scalar_t, vector_size, coherence>(
         src_wave_buffer_resource, src_thread_addr_offset, 0);
-    return src_thread_element_valid ? tmp : vector_t(0);
+    if constexpr(oob_conditional_check)
+        return src_thread_element_valid ? tmp : vector_t(0);
+    else
+        return tmp;
 #endif
 }
 
@@ -1287,7 +1682,7 @@ amd_buffer_load_invalid_element_return_zero(const T* p_src_wave,
 template <typename T,
           index_t N,
           AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence,
-          bool use_inline_asm>
+          bool oob_conditional_check       = true>
 __device__ typename vector_type_maker<T, N>::type::type
 amd_buffer_load_invalid_element_return_customized_value(const T* p_src_wave,
                                                         index_t src_thread_element_offset,
@@ -1305,19 +1700,24 @@ amd_buffer_load_invalid_element_return_customized_value(const T* p_src_wave,
 
     constexpr index_t vector_size = scalar_type<vector_t>::vector_size;
 
-    vector_t tmp = amd_buffer_load_impl<scalar_t, vector_size, coherence, use_inline_asm>(
+    vector_t tmp = amd_buffer_load_impl<scalar_t, vector_size, coherence>(
         src_wave_buffer_resource, src_thread_addr_offset, 0);
 
-    return src_thread_element_valid ? tmp : vector_t(customized_value);
+    if constexpr(oob_conditional_check)
+        return src_thread_element_valid ? tmp : vector_t(customized_value);
+    else
+        return tmp;
 }
 
 template <typename T,
           index_t N,
-          AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence>
+          AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence,
+          bool oob_conditional_check       = true>
 __device__ void amd_buffer_load_raw(typename vector_type_maker<T, N>::type::type& dst,
                                     const T* p_src_wave,
                                     index_t src_thread_element_offset,
-                                    index_t src_element_space_size)
+                                    index_t src_element_space_size,
+                                    index_t is_valid_element = 0)
 {
     const int32x4_t src_wave_buffer_resource =
         make_wave_buffer_resource(p_src_wave, src_element_space_size);
@@ -1329,8 +1729,8 @@ __device__ void amd_buffer_load_raw(typename vector_type_maker<T, N>::type::type
 
     constexpr index_t vector_size = scalar_type<vector_t>::vector_size;
 
-    amd_buffer_load_raw_impl<scalar_t, vector_size, coherence>(
-        dst, src_wave_buffer_resource, src_thread_addr_offset, 0);
+    amd_buffer_load_raw_impl<scalar_t, vector_size, coherence, oob_conditional_check>(
+        dst, src_wave_buffer_resource, src_thread_addr_offset, 0, is_valid_element);
 }
 
 // unfortunately async copy can not make sure invalid data is zero inside LDS
@@ -1360,7 +1760,8 @@ __device__ void amd_async_buffer_load_with_oob(T* smem,
 // It is user's responsibility to make sure that is true.
 template <typename T,
           index_t N,
-          AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence>
+          AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence,
+          bool oob_conditional_check       = true>
 __device__ void amd_buffer_store(const typename vector_type_maker<T, N>::type::type src_thread_data,
                                  T* p_dst_wave,
                                  const index_t dst_thread_element_offset,
@@ -1377,16 +1778,57 @@ __device__ void amd_buffer_store(const typename vector_type_maker<T, N>::type::t
     constexpr index_t vector_size = scalar_type<vector_t>::vector_size;
 
 #if CK_EXPERIMENTAL_USE_BUFFER_STORE_OOB_CHECK_OFFSET_TRICK
-    uint32_t dst_addr_shift = dst_thread_element_valid ? 0 : 0x80000000;
+    uint32_t dst_addr_shift = [&]() {
+        if constexpr(oob_conditional_check)
+            return dst_thread_element_valid ? 0 : 0x80000000;
+        else
+            return 0;
+    }();
     amd_buffer_store_impl<scalar_t, vector_size, coherence>(
         src_thread_data, dst_wave_buffer_resource, dst_addr_shift + dst_thread_addr_offset, 0);
 #else
-    if(dst_thread_element_valid)
+    if constexpr(oob_conditional_check)
+    {
+        if(dst_thread_element_valid)
+        {
+            amd_buffer_store_impl<scalar_t, vector_size, coherence>(
+                src_thread_data, dst_wave_buffer_resource, dst_thread_addr_offset, 0);
+        }
+    }
+    else
     {
         amd_buffer_store_impl<scalar_t, vector_size, coherence>(
             src_thread_data, dst_wave_buffer_resource, dst_thread_addr_offset, 0);
     }
 #endif
+}
+
+template <typename T,
+          index_t N,
+          AmdBufferCoherenceEnum coherence = AmdBufferCoherenceEnum::DefaultCoherence,
+          bool oob_conditional_check       = true>
+__device__ void
+amd_buffer_store_raw(const typename vector_type_maker<T, N>::type::type src_thread_data,
+                     T* p_dst_wave,
+                     const index_t dst_thread_element_offset,
+                     const bool dst_thread_element_valid,
+                     const index_t dst_element_space_size)
+{
+    const int32x4_t dst_wave_buffer_resource =
+        make_wave_buffer_resource(p_dst_wave, dst_element_space_size);
+
+    index_t dst_thread_addr_offset = dst_thread_element_offset * sizeof(T);
+
+    using vector_t                = typename vector_type_maker<T, N>::type::type;
+    using scalar_t                = typename scalar_type<vector_t>::type;
+    constexpr index_t vector_size = scalar_type<vector_t>::vector_size;
+
+    amd_buffer_store_raw_impl<scalar_t, vector_size, coherence, oob_conditional_check>(
+        src_thread_data,
+        dst_wave_buffer_resource,
+        dst_thread_addr_offset,
+        0,
+        dst_thread_element_valid);
 }
 
 // buffer_atomic_add requires:

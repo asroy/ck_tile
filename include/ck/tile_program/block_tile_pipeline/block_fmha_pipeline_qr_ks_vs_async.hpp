@@ -56,16 +56,36 @@ struct BlockFmhaPipelineQRKSVSAsync
     static constexpr index_t kK0BlockLength = BlockFmhaShape::kK0BlockLength;
 
     static constexpr bool kIsGroupMode = Problem::kIsGroupMode;
-    static constexpr bool kPadSeqLenQ  = Problem::kPadSeqLenQ;
+    // TODO: seq_q always support padding, hdim_q/v support multiple of vector(like 8x)
+    //       only need special care about seq_k padding (oob need set -INF of p instead of zero)
+    static_assert(Problem::kPadSeqLenQ == true && Problem::kPadHeadDimQ == true &&
+                  Problem::kPadHeadDimV == true);
+    static constexpr bool kPadSeqLenQ  = true;
     static constexpr bool kPadSeqLenK  = Problem::kPadSeqLenK;
-    static constexpr bool kPadHeadDimQ = Problem::kPadHeadDimQ;
-    static constexpr bool kPadHeadDimV = Problem::kPadHeadDimV;
+    static constexpr bool kPadHeadDimQ = true; // support multiple of vector(like 8x)
+    static constexpr bool kPadHeadDimV = true; // support multiple of vector(like 8x)
     static constexpr bool kHasBias     = Problem::kHasBias;
     static constexpr bool kStoreLSE    = Problem::kStoreLSE;
+
+    // last dimension vector length used to create tensor view(and decide buffer_load vector length)
+    // ... together with tensor distribution. tensor dist should able to overwrite this
+    static constexpr index_t kAlignmentQ = Policy::template GetAlignmentQ<Problem>();
+    static constexpr index_t kAlignmentK = Policy::template GetAlignmentK<Problem>();
+    static constexpr index_t kAlignmentV = []() {
+        if constexpr(ck::is_same_v<VLayout, ck::tensor_layout::gemm::RowMajor>)
+            return Policy::template GetAlignmentV<Problem>();
+        else
+            return kPadSeqLenK ? 1 : Policy::template GetAlignmentV<Problem>();
+    }();
+    static constexpr index_t kAlignmentO = Policy::template GetAlignmentO<Problem>();
+    static constexpr index_t kAlignmentBias =
+        kPadSeqLenK ? 1 : Policy::template GetAlignmentBias<Problem>();
 
 #if CK_FMHA_FWD_FAST_EXP2
     static constexpr auto R_LOG2E = 1.0 / math::log2e_v<SaccDataType>;
 #endif
+
+    static constexpr const char* name = "qr_async";
 
     __host__ __device__ static constexpr ck::index_t GetSmemSize()
     {
@@ -165,7 +185,9 @@ struct BlockFmhaPipelineQRKSVSAsync
 
         // TODO: we use async Copy for K, which is inline asm
         // a side effect is we have to use inline asm for q as well
-        auto q = load_tile_raw(q_dram_window);
+        auto q = decltype(load_tile(q_dram_window)){};
+        clear_tile(q);
+        load_tile_raw(q, q_dram_window);
         __builtin_amdgcn_sched_barrier(0);
 
         using SaccBlockTileType = decltype(gemm_0.MakeCBlockTile());
@@ -298,7 +320,7 @@ struct BlockFmhaPipelineQRKSVSAsync
             __builtin_amdgcn_s_barrier();
 
             const auto bias_tile = load_tile(bias_dram_window); // load bias tile
-            auto v_buf           = load_tile(v_dram_window);
+            auto v_buf           = load_tile(v_dram_window, bool_constant<false>{});
             __builtin_amdgcn_sched_barrier(0);
             { // tail
                 gemm_0(s_acc,
@@ -391,7 +413,11 @@ struct BlockFmhaPipelineQRKSVSAsync
             }
             else
             {
-                store_tile(v_lds_window,
+                auto v_lds_window_tmp =
+                    get_slice_tile(v_lds_window,
+                                   Sequence<(LdsSeq.At(Number<k0_loops>{})) * kN1, 0>{},
+                                   Sequence<(LdsSeq.At(Number<k0_loops>{}) + 1) * kN1, kK1>{});
+                store_tile(v_lds_window_tmp,
                            tile_elementwise_in(v_element_func, v_buf)); // store the prefetch
             }
 
@@ -400,7 +426,7 @@ struct BlockFmhaPipelineQRKSVSAsync
                 move_tile_window(
                     v_dram_window,
                     {0, kK1}); // will have scratch if move this right after load_tile(v_dram)...
-                v_buf = load_tile(v_dram_window); // load next v_buf
+                v_buf = load_tile(v_dram_window, bool_constant<false>{}); // load next v_buf
             }
             __builtin_amdgcn_sched_barrier(0);
 
@@ -483,7 +509,7 @@ struct BlockFmhaPipelineQRKSVSAsync
                 static_for<0, k1_loops - 1, 1>{}([&](auto i_k1) {
                     if constexpr(i_k1 != 0 && i_k1 < k1_loops - 1)
                     {
-                        v_buf = load_tile(v_dram_window); // load next v_buf
+                        v_buf = load_tile(v_dram_window, bool_constant<false>{}); // load next v_buf
                     }
                     block_sync_lds();
                     gemm_1(o_acc,
@@ -509,7 +535,11 @@ struct BlockFmhaPipelineQRKSVSAsync
                     }
                     else
                     {
-                        store_tile(v_lds_window,
+                        auto v_lds_window_tmp = get_slice_tile(
+                            v_lds_window,
+                            Sequence<(LdsSeq.At(Number<k0_loops + i_k1 + 1>{})) * kN1, 0>{},
+                            Sequence<(LdsSeq.At(Number<k0_loops + i_k1 + 1>{}) + 1) * kN1, kK1>{});
+                        store_tile(v_lds_window_tmp,
                                    tile_elementwise_in(v_element_func, v_buf)); // store next v_buf
                     }
                     if constexpr(i_k1 < k1_loops - 1)

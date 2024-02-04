@@ -53,29 +53,35 @@ struct TensorView
     // X is vector of DataType.
     // "coord" is coordinate of DataType, not X. "coord" should be aligned to X
     template <typename X,
-              bool use_iline_asm             = false,
+              bool oob_conditional_check     = true,
               typename enable_if<is_same_v<typename scalar_type<remove_cvref_t<X>>::type,
                                            typename scalar_type<remove_cvref_t<DataType>>::type>,
                                  bool>::type = false>
     __host__ __device__ constexpr remove_cvref_t<X>
-    GetVectorizedElements(const TensorCoord& coord, bool_constant<use_iline_asm> = {}) const
+    GetVectorizedElements(const TensorCoord& coord, bool_constant<oob_conditional_check> = {}) const
     {
         return buf_.template Get<X>(
             coord.GetOffset(),
             coordinate_has_valid_offset_assuming_top_index_is_valid(desc_, coord),
-            bool_constant<use_iline_asm>{});
+            bool_constant<oob_conditional_check>{});
     }
 
     // X is vector of DataType.
     // "coord" is coordinate of DataType, not X. "coord" should be aligned to X
     template <typename X,
+              bool oob_conditional_check     = true,
               typename enable_if<is_same_v<typename scalar_type<remove_cvref_t<X>>::type,
                                            typename scalar_type<remove_cvref_t<DataType>>::type>,
                                  bool>::type = false>
-    __host__ __device__ void GetVectorizedElementsRaw(remove_cvref_t<X>& dst,
-                                                      const TensorCoord& coord) const
+    __host__ __device__ void
+    GetVectorizedElementsRaw(remove_cvref_t<X>& dst,
+                             const TensorCoord& coord,
+                             bool_constant<oob_conditional_check> = {}) const
     {
-        return buf_.template GetRaw<X>(dst, coord.GetOffset());
+        return buf_.template GetRaw<X, oob_conditional_check>(
+            dst,
+            coord.GetOffset(),
+            coordinate_has_valid_offset_assuming_top_index_is_valid(desc_, coord));
     }
 
     template <typename X,
@@ -91,14 +97,31 @@ struct TensorView
     // X is vector of DataType.
     // "coord" is coordinate of DataType, not X. "coord" should be aligned to X
     template <typename X,
+              bool oob_conditional_check     = true,
               typename enable_if<is_same_v<typename scalar_type<remove_cvref_t<X>>::type,
                                            typename scalar_type<remove_cvref_t<DataType>>::type>,
                                  bool>::type = false>
-    __host__ __device__ constexpr void SetVectorizedElements(const TensorCoord& coord, const X& x)
+    __host__ __device__ constexpr void SetVectorizedElements(
+        const TensorCoord& coord, const X& x, bool_constant<oob_conditional_check> = {})
     {
-        buf_.template Set<X>(coord.GetOffset(),
-                             coordinate_has_valid_offset_assuming_top_index_is_valid(desc_, coord),
-                             x);
+        buf_.template Set<X, oob_conditional_check>(
+            coord.GetOffset(),
+            coordinate_has_valid_offset_assuming_top_index_is_valid(desc_, coord),
+            x);
+    }
+
+    template <typename X,
+              bool oob_conditional_check     = true,
+              typename enable_if<is_same_v<typename scalar_type<remove_cvref_t<X>>::type,
+                                           typename scalar_type<remove_cvref_t<DataType>>::type>,
+                                 bool>::type = false>
+    __host__ __device__ constexpr void SetVectorizedElementsRaw(
+        const TensorCoord& coord, const X& x, bool_constant<oob_conditional_check> = {})
+    {
+        buf_.template SetRaw<X, oob_conditional_check>(
+            coord.GetOffset(),
+            coordinate_has_valid_offset_assuming_top_index_is_valid(desc_, coord),
+            x);
     }
 
     __host__ __device__ void Print() const

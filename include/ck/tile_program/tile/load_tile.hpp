@@ -20,26 +20,31 @@ namespace tile_program {
 template <typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
-          index_t NumCoord>
+          index_t NumCoord,
+          bool oob_conditional_check = true>
 __device__ auto load_tile(const TileWindowWithStaticDistribution<BottomTensorView_,
                                                                  WindowLengths_,
                                                                  TileDistribution_,
-                                                                 NumCoord>& tile_window)
+                                                                 NumCoord>& tile_window,
+                          bool_constant<oob_conditional_check> = {})
 {
-    return tile_window.Load();
+    return tile_window.Load(bool_constant<oob_conditional_check>{});
 }
 
-// This version use inline asm to do loading.
-template <typename BottomTensorView_,
+template <typename T,
+          typename BottomTensorView_,
           typename WindowLengths_,
           typename TileDistribution_,
-          index_t NumCoord>
-__device__ auto load_tile_raw(const TileWindowWithStaticDistribution<BottomTensorView_,
+          index_t NumCoord,
+          bool oob_conditional_check = true>
+__device__ auto load_tile_raw(T& tile,
+                              const TileWindowWithStaticDistribution<BottomTensorView_,
                                                                      WindowLengths_,
                                                                      TileDistribution_,
-                                                                     NumCoord>& tile_window)
+                                                                     NumCoord>& tile_window,
+                              bool_constant<oob_conditional_check> = {})
 {
-    return tile_window.Load(bool_constant<true>{});
+    tile_window.LoadRaw(tile, bool_constant<oob_conditional_check>{});
 }
 
 template <typename LdsTileWindow_,
